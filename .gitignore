@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.db
+*.db.rebuilding
+*.log
+*.tmp
+docs/
+settings.json
+download-history.json
+Rebuttal-Blocks.docx
+parse-cache.db
+*.signature
