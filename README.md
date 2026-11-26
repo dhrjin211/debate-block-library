@@ -1,13 +1,10 @@
 # Debate block library
 
-Turns debate evidence into an organized block file. Point it at OpenCaselist
-(or drop in your own Word files) and it sorts every card by side and argument,
-so you can search, copy, and export blocks in seconds.
 
-- Works for any topic: Public Forum, Lincoln-Douglas, or Policy.
-- It's a script that runs on your own computer. There is no gen AI, no account
-  to make, and nothing to pay for.
-- Each card shows up once, with the number of teams that read it.
+
+- Should work for all formats and topics
+- It's a Python script so no Gen AI 
+- Sorting alg is a bit meh so ill update that when i have the chance
 
 ---
 
