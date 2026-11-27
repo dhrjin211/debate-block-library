@@ -4,7 +4,7 @@
 
 - Should work for all formats and topics
 - It's a Python script so no Gen AI 
-- Sorting alg is a bit meh so ill update that when i have the chance
+- Sorting alg is a bit meh, so I'll update that when I have the chance (if you can do it pleaseee and tyty)
 
 ---
 
@@ -145,9 +145,6 @@ restart your computer.
 ---
 
 ## For developers
-
-Plain Python (3.9+) using python-docx, lxml and requests. No database server,
-no accounts, no AI.
 
 | File | What it does |
 | --- | --- |
