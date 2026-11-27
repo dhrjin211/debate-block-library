@@ -6,7 +6,7 @@
 
 - Should work for all formats and topics
 - It's a Python script so no Gen AI 
-- Sorting alg is a bit meh, so I'll update that when I have the chance (if you can do it pleaseee and tyty)
+- Sorting alg will be improved on when i have time 
 
 ---
 
