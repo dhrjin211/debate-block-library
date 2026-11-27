@@ -96,7 +96,7 @@ new files, so later updates take seconds to a couple of minutes.
 
 ## Everyday use
 
-| To… | Do this |
+| Input| Output |
 | --- | --- |
 | Get the newest files | **↻ Update blocks** → **Update now** |
 | Add your own Word files | **↻ Update blocks** → **Add Word files…** |
