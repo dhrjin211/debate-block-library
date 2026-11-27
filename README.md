@@ -1,6 +1,8 @@
+**If you download this, please star the repo!** It's free and open source, and keeping it updated takes a lot of my time. If i see success, I will be incentivised to spend more time for more features!
+
+
+
 # Debate block library
-
-
 
 - Should work for all formats and topics
 - It's a Python script so no Gen AI 
