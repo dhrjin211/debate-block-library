@@ -24,7 +24,7 @@ class AnyTopicTests(unittest.TestCase):
         self.assertEqual(classify(card)[0], 'Universal Basic Income')
 
     def test_labels_reject_sentences_and_generic_words(self):
-        self.assertEqual(heading_label('A2 TikTok Ban---2AC'), 'TikTok Ban')
+        self.assertEqual(heading_label('A2 Kaliningrad Corridor---2AC'), 'Kaliningrad Corridor')
         self.assertEqual(heading_label('AT: Turns'), '')
         self.assertEqual(heading_label('Their evidence is old and does not say what they claim'), '')
 
@@ -75,7 +75,7 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual([c['name'] for c in chosen], ['hspf26-weekly-2026-10-12.zip'])
 
     def test_keyword_mentions(self):
-        self.assertEqual(refresh.mentions(docx_bytes('TikTok ban. TikTok users. tiktok'), ['TikTok']), 3)
+        self.assertEqual(refresh.mentions(docx_bytes('TPNW ratification. TPNW members. tpnw'), ['TPNW']), 3)
         self.assertIsNone(refresh.mentions(docx_bytes('anything'), []))
 
     def test_upload_and_delete_month(self):
@@ -119,7 +119,7 @@ class DownloadTests(RefreshTests):
     def test_download_sorts_by_month_filters_topic_and_never_repeats(self):
         bundle = io.BytesIO()
         with zipfile.ZipFile(bundle, 'w') as z:
-            z.writestr('hspf26/School/AB/aff-round1.docx', docx_bytes('TikTok TikTok TikTok ban'))
+            z.writestr('hspf26/School/AB/aff-round1.docx', docx_bytes('TPNW TPNW TPNW ratification'))
             z.writestr('hspf26/School/AB/old-topic.docx', docx_bytes('data centers'))
         bundle = bundle.getvalue()
         listing = [dict(name='hspf26-weekly-2026-11-02.zip', url='https://files/x.zip')]
@@ -128,7 +128,7 @@ class DownloadTests(RefreshTests):
             def post(self, url, **kw): return FakeResponse(200 if kw['json']['password'] == 'right' else 401)
             def get(self, url, **kw): return FakeResponse(data=listing) if url.endswith('/downloads') else FakeResponse(content=bundle)
 
-        settings.save({'caselist': 'hspf26', 'since': '2026-10-01', 'keywords': 'TikTok'})
+        settings.save({'caselist': 'hspf26', 'since': '2026-10-01', 'keywords': 'TPNW'})
         with patch.object(refresh, 'HISTORY', Path(self.dir.name) / 'history.json'), patch.object(refresh.requests, 'Session', Session):
             with self.assertRaises(ValueError):
                 refresh.download('me@example.com', 'wrong', log=lambda *a: None)
@@ -143,7 +143,7 @@ class NightBeforeTests(RefreshTests):
     def test_files_after_last_bundle_are_fetched_once_and_updates_replace_old_copy(self):
         bundle = io.BytesIO()
         with zipfile.ZipFile(bundle, 'w') as z:
-            z.writestr('hspf26/School/AB/case.docx', docx_bytes('TikTok TikTok TikTok'))
+            z.writestr('hspf26/School/AB/case.docx', docx_bytes('TPNW TPNW TPNW'))
         bundle = bundle.getvalue()
         state = {'recent': []}
         calls = []
@@ -157,7 +157,7 @@ class NightBeforeTests(RefreshTests):
                 if url.endswith('/recent'):
                     return FakeResponse(data=state['recent'])
                 if url.endswith('/download'):
-                    return FakeResponse(content=docx_bytes('TikTok TikTok TikTok updated'))
+                    return FakeResponse(content=docx_bytes('TPNW TPNW TPNW updated'))
                 return FakeResponse(content=bundle)
 
         settings.save({'caselist': 'hspf26', 'since': '2026-10-01'})

@@ -174,11 +174,11 @@ if __name__ == '__main__': unittest.main()
 class SharedHeadingTests(unittest.TestCase):
     def test_one_team_heading_goes_to_unsorted_but_shared_heading_stays(self):
         rows = [dict(arg='Action', topic_reason='Answer heading from the source', source='Team A'),
-                dict(arg='TikTok Ban', topic_reason='Answer heading from the source', source='Team A'),
-                dict(arg='TikTok Ban', topic_reason='Short source heading', source='Team B'),
+                dict(arg='Kaliningrad Corridor', topic_reason='Answer heading from the source', source='Team A'),
+                dict(arg='Kaliningrad Corridor', topic_reason='Short source heading', source='Team B'),
                 dict(arg='Economy', topic_reason='Recognized answer heading', source='Team A')]
         dash._keep_shared_heading_categories(rows)
-        self.assertEqual([r['arg'] for r in rows], [dash.REVIEW, 'TikTok Ban', 'TikTok Ban', 'Economy'])
+        self.assertEqual([r['arg'] for r in rows], [dash.REVIEW, 'Kaliningrad Corridor', 'Kaliningrad Corridor', 'Economy'])
 
 
 class IngestTests(unittest.TestCase):
