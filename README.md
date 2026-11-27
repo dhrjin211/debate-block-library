@@ -5,7 +5,7 @@
 # Debate block library
 
 - Should work for all formats and topics
-- It's a Python script so no Gen AI 
+- It's a Python script so no Gen AI / API key needed
 - Sorting alg will be improved on when i have time 
 
 ---
