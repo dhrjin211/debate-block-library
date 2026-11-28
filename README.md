@@ -107,7 +107,7 @@ new files, so later updates take seconds to a couple of minutes.
 | Copy a card into your doc | **Copy formatted**, then paste into Word or Google Docs |
 | Download one card | **Download .docx** |
 | Put everything in Google Docs | **Export all for Google Docs**, then in Google Docs: File → Open → Upload |
-| Switch to a new topic | Change the topic name in **⚙ Settings**. Then delete the old months in **My files** |
+| Switch to a new topic | Change the topic name in **⚙ Settings**. Downloads from before the new topic are left out of your blocks automatically; delete them in **My files** when you like |
 | Delete downloaded files | **My files** → **Delete** next to a month |
 
 **How cards are sorted**
@@ -115,6 +115,11 @@ new files, so later updates take seconds to a couple of minutes.
 - **Case cards count as answers.** A Pro team's case card is listed under
   **AT NEG**, because you can read it against Neg arguments, and a Con case card
   under **AT AFF**. They carry a small **Pro case card** / **Con case card** label.
+- **Categories come from the files.** A few general ones (Economy, Climate,
+  China and Taiwan, Framework, …) work on every topic. Everything else is named
+  after the headings teams actually use ("AT: Readiness Collapse"), so a new topic
+  sorts itself. A heading needs at least two teams to become a category, and
+  spellings of the same heading are joined.
 - Cards that don't clearly answer one argument go in **Unsorted**.
 - Inside each section, cards read by the most teams come first.
 

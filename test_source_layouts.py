@@ -28,7 +28,7 @@ class SourceLayoutTests(unittest.TestCase):
             path=base/'docs'/'source.docx';doc.save(path)
             cards=cardgrab.parse(path)
             self.assertEqual(len(cards),1)
-            self.assertEqual(cardgrab.label(cards[0],{},False)[1],'Nuclear Deterrence')
+            self.assertEqual(cardgrab.label(cards[0],{},False)[1],'Deterrence')
             c=cards[0];c.update(body=' '.join(c['body']),read=' '.join(c['read']),source_file='source.docx')
             with patch.object(cardformat,'BASE',base):
                 html=cardformat.formatted(c)

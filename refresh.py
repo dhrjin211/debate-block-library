@@ -162,68 +162,6 @@ def _text(data):
     return ' '.join(''.join(p.itertext()) for p in root.iter(W + 'p'))
 
 
-def choose(downloads, since, already):
-    """Weekly bulk zips posted on/after `since` that haven't been downloaded yet."""
-    picked = []
-    for d in downloads:
-        name, url = d.get('name') or '', d.get('url') or ''
-        found = re.search(r'\d{4}-\d{2}-\d{2}', name)
-        if '-weekly-' in name and found and url and found.group() >= since and name not in already:
-            picked.append(dict(name=name, url=url, date=found.group()))
-    return sorted(picked, key=lambda d: d['date'])
-
-
-def _team(path):
-    parts = Path(path).parts
-    return '_'.join(parts[-3:-1]) if len(parts) >= 3 else (parts[0] if len(parts) == 2 else 'Other')
-
-
-def _store(month, team, name, data):
-    """Save one file. An older copy of the same team's file in another month is replaced,
-    so a document that was updated (or arrived both alone and in a bundle) is kept once."""
-    team, name = _safe(team), _safe(name)
-    if DOWNLOADED.exists():
-        for old in DOWNLOADED.glob(f'*/{glob_escape(team)}/{glob_escape(name)}'):
-            if old.parent.parent.name != month:
-                old.unlink()
-    dest = DOWNLOADED / month / team / name
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-
-
-def glob_escape(text):
-    return re.sub(r'([*?\[])', r'[\1]', text)
-
-
-def _on_topic(data, words, auto=()):
-    """Keep a file if it mentions the chosen keywords (3+ times), or, with no keywords,
-    if words from the topic name make up at least 1% of its text (4+ different ones).
-    Tested on 500 real files: keeps ~96% of new-topic files and ~2% of old-topic ones."""
-    try:
-        if words:
-            return mentions(data, words) >= 3
-        if not auto:
-            return True
-        text = _text(data)
-        # One pass over the text for all topic words at once.
-        pattern = re.compile(r'\b(' + '|'.join(re.escape(w) for w in auto) + r')\w*', re.I)
-        found = [m.lower() for m in pattern.findall(text)]
-        distinct = sum(1 for w in auto if any(f.startswith(w) for f in set(found)))
-        return distinct >= min(4, max(2, len(auto) - 1)) and len(found) * 1000 / max(1, len(text.split())) >= 10
-    except Exception:
-        return False
-
-
-TAGS = re.compile(r'<[^>]+>')
-
-
-def _text(data):
-    """Plain text of a .docx, quickly (word counting doesn't need full XML parsing)."""
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
-        xml = z.read('word/document.xml').decode('utf-8', 'ignore')
-    return TAGS.sub(' ', xml.replace('</w:p>', '\n'))
-
-
 def download(email, password, log=print, pause=6):
     config = settings.load()
     caselist = config['caselist']
@@ -339,6 +277,8 @@ def download(email, password, log=print, pause=6):
 
 def months():
     """Stored files grouped by where they came from and month, newest first."""
+    from cardgrab import topic_start
+    start = topic_start()
     rows = []
     for origin, root in (('OpenCaselist', DOWNLOADED), ('Uploaded', UPLOADED)):
         if not root.exists():
@@ -346,7 +286,8 @@ def months():
         for folder in root.iterdir():
             if folder.is_dir() and MONTH.fullmatch(folder.name):
                 count = sum(1 for f in folder.rglob('*.docx'))
-                rows.append(dict(origin=origin, month=folder.name, files=count))
+                old = origin == 'OpenCaselist' and bool(start) and folder.name < start
+                rows.append(dict(origin=origin, month=folder.name, files=count, old_topic=old))
     other = sum(1 for f in DOCS.rglob('*.docx')
                 if f.is_relative_to(DOCS) and not (f.is_relative_to(DOWNLOADED) or f.is_relative_to(UPLOADED))) if DOCS.exists() else 0
     rows.sort(key=lambda r: r['month'], reverse=True)

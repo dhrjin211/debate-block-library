@@ -11,7 +11,7 @@ import re
 import sqlite3
 import sys
 import unicodedata
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -297,15 +297,41 @@ def _load_cards():
 HEADING_REASONS = ('Answer heading from the source', 'Short source heading')
 
 
+def _heading_key(name):
+    words = re.sub(r'[^a-z0-9]+', ' ', (name or '').casefold()).split()
+    return ' '.join(w[:-1] if len(w) > 3 and w.endswith('s') and not w.endswith('ss') else w for w in words)
+
+
 def _keep_shared_heading_categories(rows):
-    """A category made from a source heading must be used by at least two different
-    teams' files; one-off headings ("Action", typos) go to Unsorted instead."""
-    teams = {}
-    for row in rows:
-        if row.get("topic_reason") in HEADING_REASONS:
-            teams.setdefault(row["arg"].casefold(), set()).add(row.get("source") or row.get("source_file"))
-    for row in rows:
-        if row.get("topic_reason") in HEADING_REASONS and len(teams[row["arg"].casefold()]) < 2:
+    """Tidy categories made from source headings, for any topic.
+
+    Spellings of the same heading ("Victim Assistance", "victim assistance",
+    "Victim Assitance") become one category, named with the most common spelling.
+    A category must then be used by at least two different teams' files; one-off
+    headings ("Action", personal labels) go to Unsorted instead."""
+    import difflib
+    heading_rows = [row for row in rows if row.get("topic_reason") in HEADING_REASONS]
+    spellings = Counter(row["arg"] for row in heading_rows)
+    keys = Counter()
+    for name, count in spellings.items():
+        keys[_heading_key(name)] += count
+    group = {}
+    canonical = []
+    for key, _ in keys.most_common():
+        close = [c for c in canonical if abs(len(c) - len(key)) <= 2]
+        match = difflib.get_close_matches(key, close, n=1, cutoff=0.88) if len(key) >= 6 else []
+        group[key] = match[0] if match else key
+        if not match:
+            canonical.append(key)
+    names, teams = {}, {}
+    for name, count in spellings.most_common():
+        names.setdefault(group[_heading_key(name)], name)
+    for row in heading_rows:
+        key = group[_heading_key(row["arg"])]
+        row["arg"] = names[key]
+        teams.setdefault(key, set()).add(row.get("source") or row.get("source_file"))
+    for row in heading_rows:
+        if len(teams[group[_heading_key(row["arg"])]]) < 2:
             row["arg"] = REVIEW
 
 
@@ -769,7 +795,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </form></dialog>
 <dialog id="files-box"><form method="dialog" class="dlg">
 <h3>My files</h3>
-<p class="hint">Files are grouped by month. Deleting a month removes those Word files from this computer and from your blocks. Deleted OpenCaselist months are never downloaded again.</p>
+<p class="hint">Files are grouped by month. Deleting a month removes those Word files from this computer and from your blocks. Deleted OpenCaselist months are never downloaded again. Months from before the current topic are left out of your blocks automatically.</p>
 <div id="file-list"></div>
 <div class="row"><button id="folder" type="button">Open docs folder</button><button value="close">Close</button></div>
 </form></dialog>
@@ -914,7 +940,7 @@ $("#settings-save").onclick=async()=>{
 const monthName=m=>m?new Date(m+"-15").toLocaleDateString(undefined,{month:"long",year:"numeric"}):"";
 async function fileList(){
   const rows=await j("/api/files");
-  $("#file-list").innerHTML=rows.length?rows.map((r,i)=>`<div class="frow"><span><b>${esc(r.origin)}</b> ${esc(monthName(r.month))} · ${r.files} file${r.files==1?"":"s"}</span>${r.month?`<button type="button" data-del="${i}">Delete</button>`:""}</div>`).join(""):'<p class="hint">No files yet.</p>';
+  $("#file-list").innerHTML=rows.length?rows.map((r,i)=>`<div class="frow"><span><b>${esc(r.origin)}</b> ${esc(monthName(r.month))} · ${r.files} file${r.files==1?"":"s"}${r.old_topic?' · <i>old topic, not in your blocks</i>':""}</span>${r.month?`<button type="button" data-del="${i}">Delete</button>`:""}</div>`).join(""):'<p class="hint">No files yet.</p>';
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{const r=rows[b.dataset.del];
     if(!confirm(`Permanently delete ${r.files} ${r.origin} file(s) from ${monthName(r.month)}? This can't be undone.`))return;
     try{b.disabled=true;await post("/api/files/delete",{origin:r.origin,month:r.month});$("#files-box").close();$("#update-box").showModal();$("#signin").hidden=true;$("#no-caselist").hidden=true;await watch()}catch(e){alert(e.message);b.disabled=false}})

@@ -11,105 +11,113 @@ from functools import lru_cache
 
 REVIEW = 'Unsorted'
 PLACEHOLDER = re.compile(r'\b(?:placeholder[\s_\-]*\d*|insert\s+(?:card|tag|text)|todo|tbd|lorem ipsum)\b|^\s*<<\s*(?:inserted|.*for reference)\s*>>\s*$', re.I)
-# Each expression is an independent signal. Generic words such as AI/data center
-# do not outweigh a specific energy, water, military or economic mechanism.
+# Built-in categories are general debate impacts and argument types that come up on
+# every topic. Nothing here is tied to one resolution: topic-specific arguments get
+# their categories from the files' own headings (see heading_label), so a new topic
+# sorts itself without code changes. Each expression is an independent signal; generic
+# words such as AI do not outweigh a specific energy, military or economic mechanism.
 RULES = {
- 'Conventional Arms': (r'\b(?:hypersonic\w*|conventional (?:shift|weapons?|arms|forces|war)|precision.strike)\b',),
- 'Bioweapons': (r'\b(?:bioweapons?|biological weapons?|biowarfare|biological warfare)\b',),
- 'UK Influence': (r'\b(?:sudan|british influence|uk influence|security council|unsc|permanent seat)\b',),
- 'Nuclear Deterrence': (r'\b(?:deterren\w*|nuclear umbrella|extended deterrence|second.st[ri]+kes?|nuclear (?:security )?guarantee|mutual assured destruction|mad doctrine)\b',),
- 'NATO and Alliances': (r'\b(?:nato|north atlantic treaty organization|alliance cohesion|article (?:5|five)|burden.sharing|collective defen[cs]e)\b',),
- 'Disarmament': (r'\b(?:disarmament|abolition|abolish nuclear|nuclear ban|eliminat\w* nuclear weapons|nuclear.zero)\b',),
- 'Nonproliferation': (r'\b(?:non.proliferation|proliferat\w*|npt|non.proliferation treaty|horizontal proliferation|vertical proliferation|nuclear acquisition|denucleari[sz]\w*)\b',),
- 'Treaty Compliance': (r'\b(?:tpnw|treaty on the prohibition|ratif\w*|verification|safeguards|treaty compliance|treaty enforcement|withdrawal clause|loopholes|clandestine|cheating|no enforcement)\b',),
- 'Nuclear Risk': (r'\b(?:nuclear war|nuclear winter|accidental launch|miscalculation|entanglement|first.strike|near.detonations?|nuclear escalation|nuclear terrorism|nukes)\b',),
- 'Russia and Ukraine': (r'\b(?:russia|russian|ukraine|ukrainian|putin)\b',),
- 'Korea and Japan': (r'\b(?:south korea|north korea|korean|japan|japanese)\b',),
- 'Nuclear Justice': (r'\b(?:nuclear colonialism|nuclear test(?:ing|s)?|hibakusha|victim assi[st]+ance|victim remediation|remediation|reparations?|reperations?|compensation|humanitarian consequences|articles? 6\s*(?:&|and)\s*7)\b',),
- 'Divestment': (r'\b(?:divest\w*|disinvest\w*|nuclear (?:financ\w*|investment)|nuclear.weapons? (?:financ\w*|producers?|manufacturers?)|don.t bank on the bomb)\b',),
- 'Energy': (r'\b(?:energ(?:y|ies)|electric(?:ity|al)|grids?|power plants?|power supply|power demand|power generation|power outage|blackouts?|gas.fired|fossil fuels?|renewables?|solar|wind power|fusion|nuclear energy|smrs?|utility|utilities|ratepayers?)\b',),
- 'Water': (r'\b(?:water|drought|aquifers?|cooling water)\b',),
- 'Climate': (r'\b(?:climate|warming|carbon emissions?|carbon sinks?|greenhouse|decarboni[sz]|emissions?)\b',),
- 'Environment': (r'\b(?:environment(?:al)?|pollution|biodiversity|ecosystems?|air quality|asthma)\b',),
- 'AI Investment': (r'\b(?:bubbles?|capex|ipo|stocks?|stock market|ai investment|issuance|debt issuance|bailouts?)\b',),
- 'Economy': (r'\b(?:econ(?:omy|omic|omics|ony)?|recession|gdp|inflation|economic growth|financial|markets?|affordability|affordibility|prices?|jobs|employment|inequality|taxes)\b',),
- 'Midterms': (r'\b(?:midterms?|elections?|democrats?|republicans?|gop|voters?|credit claiming|golden dome)\b',),
- 'Offshoring': (r'\b(?:offshor\w*|outsourc\w*)\b',),
- 'Tech Race': (r'\b(?:tech race|ai race|ai leadership|us leadership|ai dominance|technology leadership|race with china|tech dev)\b',),
- 'China and Taiwan': (r'\b(?:china|chinese|taiwan|indopac|indo pacific)\b',),
- 'Diplomacy': (r'\b(?:diplomac\w*|dipplomacy|diplo|detente|alliances?|cooperation|diplomatic)\b',),
- 'Military AI': (r'\b(?:military ai|autonomous weapons?|laws|isr|nc3|command and control|hyperwar|modern warfare|mobilization|military capabilities)\b',),
- 'Military and Security': (r'\b(?:military|warfare|missile|golden dome|great power war|defense industrial|aukus)\b',),
- 'Cybersecurity': (r'\b(?:cyber\w*|hacking|hackers?)\b',),
- 'AI Safety': (r'\b(?:alignment|misalign\w*|rogue ai|ai safety|ai safeguards|ai risk|s.risks?|asi|agi impossible|artificial general intelligence)\b',),
- 'Healthcare': (r'\b(?:healthcare|health care|medical|medicine|biotech|phages?|amrs?|public health|pandemics?|bioterror)\b',),
- 'Agriculture': (r'\b(?:agricultur\w*|farmers?|farming|fertili[sz]er|bees|honey|food security)\b',),
- 'Semiconductors': (r'\b(?:semiconductors?|semi conductors?|chips?|circuit building|export controls)\b',),
- 'Minerals and Materials': (r'\b(?:minerals?|mining|copper|aluminu?m|aluminium|metals?|steel|rare earth|commodities|material supply)\b',),
+ # Security and conflict
+ 'Nuclear War': (r'\b(?:nuclear (?:war|warfare|exchange|escalation|conflict|use|strikes?|winter|terrorism)|accidental launch|miscalculation|entanglement|first.strike|near.miss\w*|nukes)\b',),
+ 'Deterrence': (r'\b(?:deterren\w*|deter|nuclear umbrella|extended deterrence|second.strikes?|mutual(?:ly)? assured destruction|security guarantees?)\b',),
+ 'Proliferation': (r'\b(?:proliferat\w*|non.?proliferation|npt|nuclear acquisition|denucleari[sz]\w*|nuclear breakout|enrichment)\b',),
+ 'Arms Control': (r'\b(?:arms control|disarmament|arms race|treaty compliance|ratif\w*|verification|safeguards|arms treaty|new start|test ban)\b',),
+ 'Bioweapons': (r'\b(?:bioweapons?|biological weapons?|biowarfare|bioterror\w*)\b',),
+ 'Terrorism': (r'\b(?:terroris\w*|terror attacks?|extremis\w*|insurgen\w*|isis|al.qaeda|radicali[sz]\w*)\b',),
+ 'Military and Security': (r'\b(?:military|warfare|missiles?|great power (?:war|conflict)|defen[cs]e industrial|readiness|hypersonic\w*|conventional (?:war|weapons?|forces)|troops|arms sales)\b',),
+ 'Military Tech': (r'\b(?:autonomous weapons?|killer robots?|drones?|military ai|nc3|command and control|hyperwar)\b',),
+ 'Cybersecurity': (r'\b(?:cyber\w*|hacking|hackers?|ransomware)\b',),
+ 'Space': (r'\b(?:outer space|space (?:race|debris|militari[sz]ation|weapons?)|orbital|satellites?|lunar|asat)\b',),
+ 'NATO and Alliances': (r'\b(?:nato|alliances?|alliance cohesion|article (?:5|five)|burden.sharing|collective defen[cs]e|allies)\b',),
+ 'Diplomacy': (r'\b(?:diplomac\w*|diplomatic|detente|negotiations?|multilateral\w*|united nations|soft power)\b',),
+ # Regions
+ 'Russia and Ukraine': (r'\b(?:russia|russian|ukraine|ukrainian|putin|kremlin)\b',),
+ 'China and Taiwan': (r'\b(?:china|chinese|beijing|taiwan|xi jinping|ccp|indo.?pacific|south china sea)\b',),
+ 'Korea and Japan': (r'\b(?:south korea|north korea|korean|pyongyang|japan|japanese)\b',),
+ 'Middle East': (r'\b(?:middle east|iran|iranian|israel\w*|gaza|saudi|syria\w*|iraq\w*|yemen|hezbollah|hamas)\b',),
+ 'India and Pakistan': (r'\b(?:india|indian|pakistan\w*|kashmir|modi)\b',),
+ # Economy and society
+ 'Economy': (r'\b(?:econ(?:omy|omic|omics)?|recession|gdp|inflation|economic growth|financial (?:crisis|markets?)|stock markets?|jobs|employment|unemployment|wages|debt|bubbles?|investment|affordab\w*|prices)\b',),
+ 'Trade': (r'\b(?:trade (?:war|deficit|deals?|polic\w*)|tariffs?|exports?|imports?|supply chains?|offshor\w*|outsourc\w*|reshoring|protectionis\w*)\b',),
+ 'Inequality and Poverty': (r'\b(?:inequality|poverty|low.income|wealth gap|working class|the poor|marginali[sz]ed)\b',),
+ 'Energy': (r'\b(?:energ(?:y|ies)|electric(?:ity|al)? grids?|power grids?|grids?|power plants?|blackouts?|fossil fuels?|oil|natural gas|renewables?|solar|wind power|nuclear power|nuclear energy|fusion|utilities|ratepayers?)\b',),
+ 'Climate': (r'\b(?:climate|global warming|warming|carbon emissions?|greenhouse|decarboni[sz]\w*|emissions?|net.zero)\b',),
+ 'Environment': (r'\b(?:environment(?:al)?|pollution|biodiversity|ecosystems?|deforestation|air quality|toxic)\b',),
+ 'Water': (r'\b(?:water (?:scarcity|shortages?|supply|use|wars?)|drought|aquifers?|freshwater)\b',),
+ 'Agriculture': (r'\b(?:agricultur\w*|farmers?|farming|crops?|fertili[sz]er|food security|food prices|famine)\b',),
+ 'Healthcare': (r'\b(?:healthcare|health care|medical|medicine|hospitals?|public health|pandemics?|disease|vaccines?|mental health)\b',),
+ 'Education': (r'\b(?:education\w*|schools?|students?|teachers?|curriculum|k.12)\b',),
+ 'Immigration': (r'\b(?:immigra\w*|migrants?|refugees?|asylum|border security|deportation\w*)\b',),
+ 'Criminal Justice': (r'\b(?:criminal justice|police|policing|prisons?|incarcerat\w*|crime|sentencing)\b',),
+ 'Human Rights': (r'\b(?:human rights|humanitarian|civil liberties|civil rights|genocide|war crimes|reparations|freedom of speech|free speech)\b',),
+ 'Privacy': (r'\b(?:privacy|surveillance|data collection|personal data|biometric\w*|facial recognition)\b',),
+ 'Democracy': (r'\b(?:democrac(?:y|ies)|democratic (?:institutions|backsliding|norms)|authoritarian\w*|autocra\w*|rule of law|misinformation|disinformation)\b',),
+ 'Elections and Politics': (r'\b(?:midterms?|elections?|electoral|democrats?|republicans?|gop|voters?|polari[sz]ation|partisan\w*|congress|political capital)\b',),
+ 'Communities': (r'\b(?:communit(?:y|ies)|indigenous|tribal|native nations?|housing|land use|local residents|rural)\b',),
+ 'Regulations': (r'\b(?:regulat\w*|enforcement|compliance|loopholes?|federalism|preemption|state governments?|patchwork|zoning|red tape|10th amendment)\b',),
+ # Technology
+ 'Innovation': (r'\b(?:innovation|competition|monopol\w*|antitrust|breakthroughs?|r\s?&\s?d|startups?)\b',),
+ 'Tech Race': (r'\b(?:tech(?:nology)? race|ai race|tech(?:nological)? leadership|ai leadership|ai dominance|race with china)\b',),
+ 'AI': (r'\b(?:ai|artificial intelligence|machine learning|compute|data centers?|algorithms?)\b',),
+ 'AI Safety': (r'\b(?:alignment|misalign\w*|rogue ai|ai safety|ai risk|existential risk from ai|superintelligen\w*|asi|agi)\b',),
+ 'Semiconductors': (r'\b(?:semiconductors?|microchips?|chips?|export controls|chipmak\w*)\b',),
+ 'Minerals and Materials': (r'\b(?:critical minerals?|minerals?|mining|rare earths?|lithium|cobalt|copper|steel|aluminu?m)\b',),
  'Quantum': (r'\bquantum\b',),
- 'Space': (r'\b(?:space|orbital|satellites?|moon|lunar|rockets?|stargate)\b',),
- 'Democracy': (r'\b(?:democracy|democratic institutions|authoritarian\w*|surveillance|citizen privacy)\b',),
- 'Communities': (r'\b(?:communit\w*|indigenous|tribal|native nations?|housing|land use|local residents)\b',),
- 'Regulations': (r'\b(?:regulat\w*|enforcement|circumven\w*|exemptions?|grandfather\w*|splitting|downsizing|smaller data centers|small data centers|rollback|zoning|patchwork|implementation|federalism|states solve|state governments?|10th amendment)\b',),
- 'Innovation': (r'\b(?:innovation|competition|monopol\w*|antitrust|breakthroughs?|green tech)\b',),
- 'AI': (r'\b(?:ai|artificial intelligence|agi|compute|cloud computing|slms?)\b',),
- 'Framework': (r'\b(?:framework|framing|pragmatism|utilitarian\w*|extinction first|extinction 1st|ex 1st|weighing|ethics|hedonism|morality|presumption|rotb|virtue|taoism|skepticism|skep|epistem\w*)\b',),
- 'Theory and Topicality': (r'\b(?:topicality|theory|conditionality|counterplan|permutation|perm do|we meet|fiat|jurisdiction|normal means|plan focus|trix|spreading|consent)\b',),
- 'Critiques': (r'\b(?:capitalism|bataille|baudrill\w*|psychoanalysis|setcol|settler|racism|ableism|fem|necrop\w*|undercommons|security k|cap good|k proper|k style|deleuze|hyperreality|marx|blackness|freire|revolutionary praxis)\b',),
- 'Speculative Impacts': (r'\b(?:aliens?|ashtar|fermi|multiverse|multi verse|vacuum decay|time travel|simulation|jupiter|grey draconian|omega points|optimus prime|john cena|anti christ)\b',),
+ # Debate theory
+ 'Framework': (r'\b(?:framework|framing|utilitarian\w*|extinction first|weighing|ethics|morality|presumption|role of the ballot|rotb|virtue|deontolog\w*|skepticism|epistem\w*|structural violence)\b',),
+ 'Theory and Topicality': (r'\b(?:topicality|theory|conditionality|counterplans?|permutations?|perm do|we meet|fiat|jurisdiction|normal means|plan focus|tricks|trix|spreading|disclosure)\b',),
+ 'Critiques': (r'\b(?:capitalism|psychoanalysis|settler colonial\w*|setcol|racism|antiblackness|afropessimism|ableism|feminis\w*|necropolitic\w*|security k|deleuze|baudrillard|hyperreality|marx\w*|biopolitic\w*|militarism|neoliberal\w*)\b',),
+ 'Speculative Impacts': (r'\b(?:aliens?|extraterrestrial|fermi paradox|multiverse|vacuum decay|time travel|simulation hypothesis|we live in a simulation)\b',),
 }
 COMPILED = {k: tuple(re.compile(p, re.I) for p in v) for k, v in RULES.items()}
-# Exact heading aliases are reliable, even when evidence discusses another impact.
+# Exact heading aliases: short headings debaters use on every topic.
 ALIASES = {
- 'miscalc':'Nuclear Risk','escalation miscalc':'Nuclear Risk','tensions':'Nuclear Risk',
- 'b61s':'Nuclear Risk','b61 s':'Nuclear Risk','entanglement':'Nuclear Risk',
- 'victim remediation':'Nuclear Justice','victim assistance':'Nuclear Justice','victim assitance':'Nuclear Justice',
- 'testing':'Nuclear Justice','humanitarian risks':'Nuclear Justice','reparations':'Nuclear Justice','reperations':'Nuclear Justice','aid':'Nuclear Justice',
- 'sv':'Framework','structural violence':'Framework','extinction comes first':'Framework',
- 'turkey':'Nonproliferation','poland':'Nonproliferation','east asian prolif':'Nonproliferation',
- 'subs':'Nuclear Risk','arctic':'Russia and Ukraine','lithuania':'Russia and Ukraine',
- 'london':'UK Influence','united kingdom':'UK Influence','uk':'UK Influence',
- 'conventional':'Conventional Arms','modern weapons':'Conventional Arms','insufficient conventional defense':'Conventional Arms',
- 'austerity':'Economy','divestment':'Divestment','nuclear investment':'Divestment',
- 'collapse':'NATO and Alliances','us pullout':'NATO and Alliances','us relations':'NATO and Alliances',
- 'disclosure':'Theory and Topicality','advocacy':'Theory and Topicality',
- 'cap sustainable':'Critiques','power rep':'Critiques','animal suffering':'Framework','animal wipeout':'Framework',
- 'resilience':'NATO and Alliances','resiliency':'NATO and Alliances',
- 'humanitarian law and human rights':'Nuclear Justice','arms control':'Diplomacy',
- 'hell':'Speculative Impacts','terror':'Nuclear Risk','hybrid war':'Russia and Ukraine',
- 'sudan':'UK Influence','uk influence':'UK Influence','security council':'UK Influence',
- 'conventional shift':'Conventional Arms','hypersonics':'Conventional Arms',
- 'bioweapons':'Bioweapons','biological weapons':'Bioweapons',
- 'deterrence':'Nuclear Deterrence','nuclear deterrence':'Nuclear Deterrence',
- 'coercion':'Nuclear Deterrence','conventional deterrence':'Nuclear Deterrence',
- 'umbrella':'Nuclear Deterrence','extended deterrence':'Nuclear Deterrence',
- 'nato':'NATO and Alliances','alliance cohesion':'NATO and Alliances',
- 'disarmament':'Disarmament','nuclear ban':'Disarmament','abolition':'Disarmament',
- 'proliferation':'Nonproliferation','nonproliferation':'Nonproliferation','npt':'Nonproliferation',
- 'prolif':'Nonproliferation','nonprolif':'Nonproliferation','arms race':'Nonproliferation',
- 'tpnw':'Treaty Compliance','verification':'Treaty Compliance','ratification':'Treaty Compliance',
- 'nuclear war':'Nuclear Risk','nukes':'Nuclear Risk','nuclear winter':'Nuclear Risk',
- 'terrorism':'Nuclear Risk','accidents':'Nuclear Risk','miscalculation':'Nuclear Risk',
- 'russia':'Russia and Ukraine','ukraine':'Russia and Ukraine',
+ # security
+ 'nuclear war':'Nuclear War','nuke war':'Nuclear War','nukes':'Nuclear War','nuclear winter':'Nuclear War','miscalc':'Nuclear War',
+ 'miscalculation':'Nuclear War','escalation':'Nuclear War','nuclear escalation':'Nuclear War','accidents':'Nuclear War','entanglement':'Nuclear War',
+ 'deterrence':'Deterrence','nuclear deterrence':'Deterrence','conventional deterrence':'Deterrence','extended deterrence':'Deterrence',
+ 'umbrella':'Deterrence','nuclear umbrella':'Deterrence','coercion':'Deterrence','credibility':'Deterrence',
+ 'proliferation':'Proliferation','prolif':'Proliferation','nonproliferation':'Proliferation','nonprolif':'Proliferation','npt':'Proliferation',
+ 'arms control':'Arms Control','disarmament':'Arms Control','arms race':'Arms Control','verification':'Arms Control','ratification':'Arms Control',
+ 'bioweapons':'Bioweapons','biological weapons':'Bioweapons','bioterror':'Bioweapons','bioterrorism':'Bioweapons',
+ 'terrorism':'Terrorism','terror':'Terrorism','terrorists':'Terrorism','nuclear terrorism':'Terrorism',
+ 'military':'Military and Security','heg':'Military and Security','hegemony':'Military and Security','readiness':'Military and Security',
+ 'conventional':'Military and Security','hypersonics':'Military and Security','great power war':'Military and Security',
+ 'military ai':'Military Tech','laws':'Military Tech','drones':'Military Tech','autonomous weapons':'Military Tech',
+ 'cyber':'Cybersecurity','cybersecurity':'Cybersecurity','cyberattacks':'Cybersecurity','space':'Space','space war':'Space',
+ 'nato':'NATO and Alliances','alliances':'NATO and Alliances','alliance cohesion':'NATO and Alliances','allies':'NATO and Alliances',
+ 'diplomacy':'Diplomacy','diplo':'Diplomacy','dipplomacy':'Diplomacy','detente':'Diplomacy','soft power':'Diplomacy',
+ # regions
+ 'russia':'Russia and Ukraine','ukraine':'Russia and Ukraine','china':'China and Taiwan','taiwan':'China and Taiwan',
  'south korea':'Korea and Japan','north korea':'Korea and Japan','korea':'Korea and Japan','japan':'Korea and Japan',
- 'econ':'Economy','economics':'Economy','economy':'Economy','econony':'Economy',
- 'grid':'Energy','grids':'Energy','grid collapse':'Energy','grid power':'Energy','energy':'Energy',
- 'electricity':'Energy','electricity prices':'Energy','energy prices':'Energy','clean energy':'Energy','renewables':'Energy','nuclear':'Energy','fusion':'Energy','smrs':'Energy',
- 'water':'Water','climate':'Climate','warming':'Climate','climate change':'Climate',
- 'environment':'Environment','environmental':'Environment','enviorment':'Environment','pollution':'Environment',
- 'tech race':'Tech Race','ai race':'Tech Race','leadership':'Tech Race','ai leadership':'Tech Race','race':'Tech Race',
- 'bubble':'AI Investment','bubbles':'AI Investment','ai bubble':'AI Investment','investment':'AI Investment',
- 'midterms':'Midterms','politics':'Midterms','china':'China and Taiwan','taiwan':'China and Taiwan',
- 'diplomacy':'Diplomacy','diplo':'Diplomacy','dipplomacy':'Diplomacy','detente':'Diplomacy',
- 'military':'Military and Security','military ai':'Military AI','laws':'Military AI','isr':'Military AI',
- 'medical ai':'Healthcare','medical':'Healthcare','medicine':'Healthcare','healthcare':'Healthcare',
- 'cyber':'Cybersecurity','cybersecurity':'Cybersecurity','quantum':'Quantum','offshoring':'Offshoring',
- 'ai':'AI','agi':'AI Safety','misalignment':'AI Safety','alignment':'AI Safety',
- 'regulations':'Regulations','regs':'Regulations','federalism':'Regulations','states':'Regulations',
- 'framework':'Framework','fw':'Framework','framing':'Framework','extinction first':'Framework',
- 't':'Theory and Topicality','topicality':'Theory and Topicality','theory':'Theory and Topicality',
- 'k':'Critiques','space':'Space','agriculture':'Agriculture','democracy':'Democracy',
- 'cloud':'AI','semis':'Semiconductors','semiconductors':'Semiconductors',
+ 'iran':'Middle East','israel':'Middle East','middle east':'Middle East','india':'India and Pakistan','pakistan':'India and Pakistan',
+ # economy and society
+ 'econ':'Economy','economics':'Economy','economy':'Economy','econony':'Economy','recession':'Economy','jobs':'Economy',
+ 'inflation':'Economy','investment':'Economy','bubble':'Economy','bubbles':'Economy','austerity':'Economy',
+ 'trade':'Trade','tariffs':'Trade','supply chains':'Trade','offshoring':'Trade','outsourcing':'Trade',
+ 'inequality':'Inequality and Poverty','poverty':'Inequality and Poverty',
+ 'energy':'Energy','grid':'Energy','grids':'Energy','grid collapse':'Energy','electricity':'Energy','electricity prices':'Energy',
+ 'energy prices':'Energy','clean energy':'Energy','renewables':'Energy','nuclear power':'Energy','nuclear energy':'Energy','fusion':'Energy','oil':'Energy',
+ 'climate':'Climate','warming':'Climate','climate change':'Climate','emissions':'Climate',
+ 'environment':'Environment','environmental':'Environment','enviorment':'Environment','pollution':'Environment','biodiversity':'Environment',
+ 'water':'Water','agriculture':'Agriculture','food':'Agriculture','food security':'Agriculture',
+ 'healthcare':'Healthcare','health':'Healthcare','medical':'Healthcare','medicine':'Healthcare','pandemics':'Healthcare','disease':'Healthcare',
+ 'education':'Education','schools':'Education','immigration':'Immigration','refugees':'Immigration',
+ 'crime':'Criminal Justice','policing':'Criminal Justice','prisons':'Criminal Justice',
+ 'human rights':'Human Rights','humanitarian':'Human Rights','privacy':'Privacy','surveillance':'Privacy',
+ 'democracy':'Democracy','authoritarianism':'Democracy','elections':'Elections and Politics','midterms':'Elections and Politics',
+ 'politics':'Elections and Politics','polarization':'Elections and Politics','political capital':'Elections and Politics',
+ 'regulations':'Regulations','regs':'Regulations','federalism':'Regulations','enforcement':'Regulations',
+ # technology
+ 'innovation':'Innovation','competition':'Innovation','tech race':'Tech Race','ai race':'Tech Race','ai leadership':'Tech Race',
+ 'ai':'AI','cloud':'AI','agi':'AI Safety','misalignment':'AI Safety','alignment':'AI Safety','ai safety':'AI Safety',
+ 'semis':'Semiconductors','semiconductors':'Semiconductors','chips':'Semiconductors','minerals':'Minerals and Materials','quantum':'Quantum',
+ # theory
+ 'framework':'Framework','fw':'Framework','framing':'Framework','extinction first':'Framework','extinction comes first':'Framework',
+ 'sv':'Framework','structural violence':'Framework','util':'Framework','weighing':'Framework',
+ 't':'Theory and Topicality','topicality':'Theory and Topicality','theory':'Theory and Topicality','disclosure':'Theory and Topicality',
+ 'condo':'Theory and Topicality','perm':'Theory and Topicality','k':'Critiques','kritik':'Critiques','cap':'Critiques','capitalism':'Critiques',
+ 'aliens':'Speculative Impacts','spark':'Speculative Impacts',
 }
 GENERIC = {'','aff','neg','pro','con','cards','card','link','links','off','offs','on','analytics','analytic','extensions','extension','extention','ext','misc','new','other stuff','args','arguments','evidence','random','backlines','backline','2ac','2nc','1ar','1nr','a2','at','adv','da','cp','plan','general','responses','response','overview','ov','o v','u','uq','l','lt','nl','nq','nu','turn','turns','solvency','link defense','impact defense','impact mitigation','defense','impact','case','other unclear','other','top level','core','c1','c2','c3','offense','blocks','rebuttal','frontline'}
 
@@ -143,19 +151,48 @@ def signals(text):
     return Counter(dict(_signals(text or '')))
 
 
-def heading_topic(value):
+THEORY = {'Framework', 'Theory and Topicality', 'Critiques'}
+_TOPIC = [None, '']
+
+
+def current_topic():
+    """The topic name from Settings (re-read only when settings.json changes)."""
+    try:
+        import settings
+        stamp = settings.PATH.stat().st_mtime_ns if settings.PATH.exists() else 0
+        if _TOPIC[0] != stamp:
+            _TOPIC[:] = [stamp, settings.load()['topic']]
+    except Exception:
+        return ''
+    return _TOPIC[1]
+
+
+@lru_cache(maxsize=32)
+def topic_categories(topic):
+    """Built-in categories the resolution itself is about.
+
+    On a topic about arms sales, "Military and Security" would swallow almost every
+    card, so those cards are sorted by their own headings instead (AT: Saudi, AT:
+    Readiness, ...). The broad category is only a last resort for cards with no heading."""
+    return frozenset(t for t, patterns in COMPILED.items()
+                     if t not in THEORY and any(p.search(topic or '') for p in patterns))
+
+
+def heading_topic(value, skip=frozenset()):
     cleaned = clean_heading(value)
     if cleaned in GENERIC or not cleaned:
         return None
     if cleaned in ALIASES:
-        return ALIASES[cleaned]
+        return ALIASES[cleaned] if ALIASES[cleaned] not in skip else None
     # Near-misspellings of a known heading ("detterence") join that category.
     if len(cleaned) >= 6:
         import difflib
         close = difflib.get_close_matches(cleaned, [k for k in ALIASES if len(k) >= 6 and abs(len(k) - len(cleaned)) <= 1], n=1, cutoff=0.88)
         if close:
-            return ALIASES[close[0]]
+            return ALIASES[close[0]] if ALIASES[close[0]] not in skip else None
     scores = signals(cleaned)
+    for t in skip:
+        scores[t] = 0
     if scores['Energy']:
         return 'Energy'
     # A sentence about AI and energy belongs in Energy; AI alone is too generic.
@@ -193,11 +230,12 @@ def heading_label(value):
     return text
 
 
-def classify(card):
+def classify(card, topic=None):
+    skip = topic_categories(current_topic() if topic is None else topic)
     headings = [card.get('block_heading',card.get('block','')), card.get('arg_heading',card.get('arg',''))]
     for h in headings:
         if len(h.split()) <= 8 and len(h) <= 85:
-            topic = heading_topic(h)
+            topic = heading_topic(h, skip)
             if topic:
                 return topic, 'Recognized answer heading', False
     # Any topic: an explicit "AT ..." heading the built-in list doesn't know
@@ -215,13 +253,14 @@ def classify(card):
     if isinstance(body,list): body=' '.join(body)
     selected_scores = signals(read)
     body_scores = signals(body[:4000])
-    scores = Counter({t: 5*min(tag_scores[t],3) + 2*min(selected_scores[t],3) + min(body_scores[t],3) for t in RULES})
+    all_scores = Counter({t: 5*min(tag_scores[t],3) + 2*min(selected_scores[t],3) + min(body_scores[t],3) for t in RULES})
+    scores = Counter({t: v for t, v in all_scores.items() if t not in skip})
     if any(scores[t] >= 5 for t in scores if t != 'AI'):
         scores['AI'] = 0
     ranked = scores.most_common(2)
     best,score = ranked[0]
     for h in headings:
-        topic = heading_topic(h)
+        topic = heading_topic(h, skip)
         if topic:
             # Long source claims can be stale/mis-styled headings. Veto a mismatch
             # when this card's own claim and evidence support a different mechanism.
@@ -236,6 +275,14 @@ def classify(card):
         name = heading_label(h)
         if name:
             return name, 'Short source heading', False
+    # Last resort: the broad category the resolution is about.
+    for h in headings:
+        topic = heading_topic(h)
+        if topic in skip:
+            return topic, 'Topic-wide category (no clearer heading)', False
+    wide = Counter({t: all_scores[t] for t in skip}).most_common(1)
+    if wide and wide[0][1] >= 5:
+        return wide[0][0], 'Topic-wide category (no clearer heading)', False
     return REVIEW, 'Ambiguous target; review original claim and evidence', True
 
 

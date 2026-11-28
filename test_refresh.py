@@ -100,6 +100,22 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(settings.save({'since': '2026-09-15'})['since'], '2026-09-15')
 
 
+class OldTopicTests(unittest.TestCase):
+    def test_downloads_from_before_the_topic_stay_out_of_the_blocks(self):
+        import tempfile
+        import cardgrab
+        with tempfile.TemporaryDirectory() as folder:
+            docs = Path(folder)
+            for part in ('OpenCaselist/2026-09/TeamA/old.docx', 'OpenCaselist/2026-10/TeamA/new.docx',
+                         'Uploaded/2026-08/mine.docx', 'by hand.docx'):
+                (docs / part).parent.mkdir(parents=True, exist_ok=True)
+                (docs / part).write_bytes(b'x')
+            with patch.object(cardgrab, 'topic_start', lambda: '2026-10'):
+                kept, left_out = cardgrab.library_files(docs)
+        self.assertEqual(sorted(f.name for f in kept), ['by hand.docx', 'mine.docx', 'new.docx'])
+        self.assertEqual(left_out, 1)
+
+
 if __name__ == '__main__':
     unittest.main()
 

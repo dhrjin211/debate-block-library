@@ -314,7 +314,8 @@ def _library_signature(files, keep_all):
     """Fingerprint of everything a rebuild depends on: the files, the case-card
     setting, and the code that reads and sorts cards."""
     import hashlib
-    digest = hashlib.sha256(str(keep_all).encode())
+    from organize import current_topic
+    digest = hashlib.sha256(str(keep_all).encode() + current_topic().encode())
     for name in ("cardparse.py", "cardgrab.py", "organize.py"):
         digest.update((BASE_DIR / name).read_bytes())
     for f in files:
@@ -323,11 +324,43 @@ def _library_signature(files, keep_all):
     return digest.hexdigest()
 
 
+def topic_start():
+    """First month of the current topic (or of the custom start date in Settings)."""
+    import settings
+    try:
+        return settings.since()[:7]
+    except Exception:
+        return ""
+
+
+def library_files(folder):
+    """Word files that belong in the library, and how many old-topic downloads were left out.
+
+    Downloads are stored by month (docs/OpenCaselist/YYYY-MM). When a new topic starts,
+    months before it are the old topic, so their cards stay out of the blocks until the
+    user deletes them. Uploaded files and files added by hand are always kept."""
+    start = topic_start()
+    kept, left_out = [], 0
+    for f in sorted(Path(folder).rglob("*.docx")):
+        if f.name.startswith("~$"):
+            continue
+        parts = f.relative_to(folder).parts
+        if (start and len(parts) >= 3 and parts[0] == "OpenCaselist"
+                and re.fullmatch(r"\d{4}-\d{2}", parts[1]) and parts[1] < start):
+            left_out += 1
+            continue
+        kept.append(f)
+    return kept, left_out
+
+
 def ingest(folder, keep_all=False):
     import os
     keep_all = keep_all or include_constructive_evidence()
     database = Path(DB)
-    files = [f for f in sorted(Path(folder).rglob("*.docx")) if not f.name.startswith("~$")]
+    files, old_topic = library_files(folder)
+    if old_topic:
+        print(f"Left out {old_topic} downloaded files from before the current topic "
+              f"(posted before {topic_start()}). Delete them under My files.", flush=True)
     signature = _library_signature(files, keep_all)
     signature_file = database.with_suffix(database.suffix + ".signature")
     if database.exists() and signature_file.exists() and signature_file.read_text() == signature:
@@ -344,7 +377,8 @@ def ingest(folder, keep_all=False):
     names, speeches = {}, Counter()
     try:
         import hashlib
-        sort_version = hashlib.sha256(str(keep_all).encode() + b"".join(
+        from organize import current_topic
+        sort_version = hashlib.sha256(str(keep_all).encode() + current_topic().encode() + b"".join(
             (BASE_DIR / name).read_bytes() for name in ("cardgrab.py", "organize.py"))).hexdigest()[:16]
         _forget_missing(files)
         cache = _open_cache()

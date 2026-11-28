@@ -14,7 +14,7 @@ def card(**kwargs):
 class ClassificationTests(unittest.TestCase):
     def test_all_evidence_mode_still_rejects_invalid_cards(self):
         c = card()
-        c.update(speech='1AC', arg='Nuclear Deterrence')
+        c.update(speech='1AC', arg='Deterrence')
         self.assertIsNotNone(cg.label(c, {}, True, 'Team-Pro-Round.docx'))
         c['cite'] = ''
         self.assertIsNone(cg.label(c, {}, True, 'Team-Pro-Round.docx'))
@@ -218,5 +218,5 @@ class IngestTests(unittest.TestCase):
                 self.assertIn('reading 1 new or changed file.', third)
                 self.assertRegex(third, r'\b2 (response )?cards stored')
                 rows = sqlite3.connect(tmp / 'cards.db').execute('SELECT arg, source, reason FROM cards ORDER BY source').fetchall()
-                self.assertEqual([r[:2] for r in rows], [('Nuclear Deterrence', 'TeamA'), ('NATO and Alliances', 'TeamB')])
+                self.assertEqual([r[:2] for r in rows], [('Deterrence', 'TeamA'), ('NATO and Alliances', 'TeamB')])
                 self.assertTrue(all(r[2] for r in rows))
