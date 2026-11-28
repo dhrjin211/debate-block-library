@@ -22,7 +22,8 @@ from threading import Lock, RLock
 import threading
 import subprocess
 from organize import classify, display_title, veto, heading_topic, REVIEW, THEORY as THEORY_CATEGORIES
-from learn import learned_sort
+from learn import learned_sort, citation_key
+import corrections
 from cardformat import formatted, docx_bytes
 
 import settings
@@ -151,6 +152,25 @@ def _preferred_card(rows):
         row.get("marked", "").count(OPEN),
         len(row.get("body", "")),
     ))
+
+
+def _correction_key(row):
+    return corrections.key(_evidence_text(row), _normalized_card_text(row.get("cite", "")))
+
+
+def move_card(card_id, side, arg):
+    """Save a hand correction for a card and every copy of its evidence."""
+    card_id = int(card_id)
+    rows = _RAW_CARD_CACHE if _RAW_CARD_CACHE is not None else []
+    row = next((r for r in rows if r.get("id") == card_id), None)
+    if row is None:
+        row = next((r for r in _all_cards() if r.get("id") == card_id), None)
+    if row is None:
+        raise ValueError("That card is no longer in the library. Reload the page.")
+    saved = corrections.save(_correction_key(row), side or row.get("side"), arg, row.get("tag"))
+    with _CACHE_LOCK:
+        _forget_cards()
+    return saved
 
 
 def _merged_cards(rows):
@@ -295,7 +315,16 @@ def _load_cards():
                 row.update(topic_reason=reason, needs_review=needs_review, display_tag=display_title(row['tag']))
                 eligible.append(row)
         _keep_shared_heading_categories(eligible)
+        corrections.apply(eligible, _correction_key)
         learned_sort(eligible, log=lambda line: print(line, flush=True))
+        # How many teams cite each article (any cut of it), to rank popular evidence up.
+        readers = {}
+        for row in eligible:
+            row["_article"] = citation_key(row.get("cite"))
+            if row["_article"]:
+                readers.setdefault(row["_article"], set()).add(row.get("source") or row.get("source_file"))
+        for row in eligible:
+            row["article_teams"] = len(readers.get(row["_article"], ()))
         if not settings.show_theory():
             eligible = [row for row in eligible if row["arg"] not in THEORY_CATEGORIES]
         _RAW_CARD_CACHE = eligible
@@ -496,13 +525,15 @@ def _list_entry(card):
         entry.update(display_tag=display_title(clean_tag(card["tag"])), preview=preview_text(card),
                      format_version=format_version(card), strength=strength, strength_reasons=reasons)
         card["_list_entry"] = entry
-    return dict(card["_list_entry"], teams=len(card["teams"]))
+    return dict(card["_list_entry"], teams=len(card["teams"]),
+                article_teams=max(card.get("article_teams") or 0, len(card["teams"])))
 
 
 def pack(rows):
-    """Rows are already merged. Most-read evidence first, then strongest, then tag."""
+    """Rows are already merged. Most-read evidence first, then evidence from the most
+    widely cited articles, then strongest, then tag."""
     cards = [_list_entry(card) for card in rows]
-    return sorted(cards, key=lambda c: (-c["teams"], -c["strength"], _sort_text(c["tag"]), c["id"]))
+    return sorted(cards, key=lambda c: (-c["teams"], -c["article_teams"], -c["strength"], _sort_text(c["tag"]), c["id"]))
 
 
 def cards_for(side, arg, group, source=''):
@@ -693,6 +724,8 @@ class H(BaseHTTPRequestHandler):
                         raise ValueError("Wait for the current update to finish.")
                     result = {"deleted": refresh.delete_month(data.get("origin"), data.get("month"))}
                     start_job(False)
+                elif path == "/api/move":
+                    result = move_card(data.get("id"), data.get("side"), data.get("arg"))
                 elif path == "/api/export":
                     start_export()
                     result = {"started": True}
@@ -763,6 +796,7 @@ h1{font:800 30px/1.2 system-ui,sans-serif;margin:0 0 4px;letter-spacing:-.01em}
 .bar button,.dlg button{padding:8px 14px;cursor:pointer;border:1px solid #bbb;border-radius:8px;background:#fff;font:inherit}
 button.primary{background:#0f766e;color:#fff;border-color:#0f766e}
 button:disabled{opacity:.6;cursor:wait}
+[hidden]{display:none!important}
 dialog{border:none;border-radius:12px;padding:0;max-width:520px;width:calc(100% - 32px)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 .dlg{padding:20px 24px;display:flex;flex-direction:column;gap:8px}
@@ -810,6 +844,16 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <div id="file-list"></div>
 <div class="row"><button id="folder" type="button">Open docs folder</button><button value="close">Close</button></div>
 </form></dialog>
+<dialog id="move-box"><form method="dialog" class="dlg">
+<h3>Move this card</h3>
+<p class="hint" id="move-tag"></p>
+<label>Side<select id="move-side"><option>AT AFF</option><option>AT NEG</option></select></label>
+<label>Category<select id="move-arg"></select></label>
+<label id="move-new-row" hidden>New category name<input id="move-new" maxlength="60" placeholder="e.g. Readiness Collapse"></label>
+<p class="hint">Your choice is kept through updates, and the app learns from it to sort similar cards.</p>
+<p id="move-error" class="err"></p>
+<div class="row"><button value="cancel">Cancel</button><button id="move-save" type="button">Move</button></div>
+</form></dialog>
 <p id="export-help" style="font-size:14px;margin:0 0 20px;color:#555">Downloads the complete organized library as a .docx with original card formatting. In Google Docs, use File → Open → Upload. Export again anytime to include new cards.</p>
 <div class="cols">
 <div class="box" id="side"></div>
@@ -835,6 +879,7 @@ const CASE=/^\s*(?:case\b\W*)?(?:1ac|1nc|3ac|3nc|constructive|case)\b/i;
 const caseLabel=c=>!CASE.test(c.speech||"")?"":c.side==="AT NEG"?"Pro case card":c.side==="AT AFF"?"Con case card":"Case card";
 async function side(){
   const generation=++sidebarId, o=await j("/api/outline?"+sourceQuery());if(generation!==sidebarId)return;
+  window.outlineData=o;
   const tot=o.reduce((s,a)=>s+a.n,0);
   if(!tot&&!$("#source").value.trim()){$("#side").innerHTML="<h4>0 CARDS</h4>";$("#out").innerHTML='<div class="box empty"><h3>No blocks yet</h3><p>Click <b>↻ Update blocks</b> to download files from OpenCaselist or add your own Word files.</p></div>';return}
   $("#side").innerHTML=`<h4>${tot} CARDS</h4>`+o.map((s,i)=>
@@ -850,6 +895,40 @@ async function side(){
   const firstTopic=document.querySelector("[data-topic-i]");if(firstTopic)firstTopic.click();
   const g=document.querySelector(".grp");if(g)g.click();
 }
+let moving=null;
+function moveOptions(sideName,current){
+  const names=new Set(["Unsorted"]);
+  (window.outlineData||[]).forEach(s=>{if(s.side===sideName)s.topics.forEach(t=>names.add(t.arg))});
+  const list=[...names].sort((a,b)=>a==="Unsorted"?1:b==="Unsorted"?-1:a.localeCompare(b));
+  $("#move-arg").innerHTML=list.map(n=>`<option${n===current?" selected":""}>${esc(n)}</option>`).join("")+'<option value="__new">New category…</option>';
+  $("#move-new-row").hidden=$("#move-arg").value!=="__new";
+}
+function moveCard(i){
+  moving=window.cur[i];
+  $("#move-tag").textContent=moving.display_tag||moving.tag;
+  $("#move-side").value=moving.side==="AT NEG"?"AT NEG":"AT AFF";
+  moveOptions($("#move-side").value,moving.arg);
+  $("#move-new").value="";$("#move-error").textContent="";
+  $("#move-box").showModal();
+}
+$("#move-side").onchange=()=>moveOptions($("#move-side").value,moving&&moving.arg);
+$("#move-arg").onchange=()=>{$("#move-new-row").hidden=$("#move-arg").value!=="__new";if(!$("#move-new-row").hidden)$("#move-new").focus()};
+$("#move-save").onclick=async()=>{
+  const arg=$("#move-arg").value==="__new"?$("#move-new").value.trim():$("#move-arg").value;
+  if(!arg){$("#move-error").textContent="Type a name for the new category.";return}
+  try{
+    $("#move-save").disabled=true;
+    await post("/api/move",{id:moving.id,side:$("#move-side").value,arg});
+    $("#move-box").close();
+    const open=document.querySelector(".grp.on");
+    const where=open?[open.dataset.side,open.dataset.a,open.dataset.g]:null;
+    await side();
+    if(where){const again=[...document.querySelectorAll(".grp")].find(e=>e.dataset.side===where[0]&&e.dataset.a===where[1]&&e.dataset.g===where[2]);
+      if(again){again.closest("[id^=t]").hidden=false;again.closest("[id^=s]").hidden=false;again.click()}}
+    $("#notice").textContent=`Moved to ${arg}. The app will use this to sort similar cards.`;
+  }catch(e){$("#move-error").textContent=e.message}
+  finally{$("#move-save").disabled=false}
+};
 async function show(title,sub,url){
   const current=++requestId;
   richCache.clear();
@@ -860,13 +939,13 @@ async function show(title,sub,url){
   $("#notice").textContent=cards.length?"":"No cards found.";
   $("#out").innerHTML=`<h1>${esc(title)}</h1><div class="sub">${esc(sub)} · ${cards.length} cards</div><div class="grid">`+cards.map((c,i)=>{
     const body="";
-    const meta=[c.speech,c.source,`${c.teams} team${c.teams==1?"":"s"}`].filter(Boolean).join(" · ");
+    const meta=[c.speech,c.source,`${c.teams} team${c.teams==1?"":"s"}`,c.article_teams>c.teams?`article cited by ${c.article_teams} teams`:""].filter(Boolean).join(" · ");
     return `<div>${meta?`<div class="read">${esc(meta)}</div>`:""}<div class="card" id="c${i}">
       ${caseLabel(c)?`<div class="case">${caseLabel(c)}</div>`:''}<div class="tag">${esc(c.display_tag||c.tag)}</div><div class="cite"><b>Cite:</b> ${esc(c.cite)}</div>
       <div class="preview">${esc(c.preview)}</div>
       <div class="body">${body}</div>
       <span class="show" onclick="toggleCard(${i})">▸ Show full card</span>
-      <div class="acts"><a href="/card/${c.id}.docx">Download .docx</a><span onclick="cp(${i})">Copy formatted</span></div></div></div>`}).join("")+"</div>";
+      <div class="acts"><a href="/card/${c.id}.docx">Download .docx</a><span onclick="cp(${i})">Copy formatted</span><span onclick="moveCard(${i})">Move to…</span></div></div></div>`}).join("")+"</div>";
   window.cur=cards;
   // Load original formatting only for cards on or near the screen, 4 at a time.
   if(formatObserver)formatObserver.disconnect();

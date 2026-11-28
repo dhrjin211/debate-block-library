@@ -73,5 +73,41 @@ class ProseEquationTests(unittest.TestCase):
         self.assertTrue(cardformat.prose_equation('1.4billionfrom2019,evengiven'))
 
 
+class CitationTests(unittest.TestCase):
+    def test_citation_keys(self):
+        self.assertEqual(learn.citation_key('Smith 24 [John Smith, prof]'), 'a:smith24')
+        self.assertEqual(learn.citation_key("Lee and Park '23, Foreign Affairs"), 'a:lee23')
+        self.assertEqual(learn.citation_key('Doe 2021 https://www.example.org/a/b?utm=1'), 'u:example.org/a/b')
+
+    def test_vague_card_follows_where_other_teams_filed_the_article(self):
+        rows = [card('Readiness', 'Readiness is collapsing', 'military readiness gaps', s) for s in 'AB']
+        for r in rows:
+            r['cite'] = 'Kofman 24 [Michael Kofman]'
+        vague = card(REVIEW, 'Their evidence is wrong', 'short', 'C', 'Ambiguous')
+        vague['cite'] = 'Kofman 24 [Michael Kofman, CNA]'
+        rows.append(vague)
+        learn.learned_sort(rows)
+        self.assertEqual(vague['arg'], 'Readiness')
+        self.assertEqual(vague['topic_reason'], learn.CITE_REASON)
+
+
+class CorrectionTests(unittest.TestCase):
+    def test_moved_cards_stay_moved_and_teach_the_sorter(self):
+        import tempfile
+        from pathlib import Path
+        import corrections
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(corrections, 'PATH', Path(folder) / 'corrections.json'):
+                corrections.save('k1', 'AT NEG', 'Teacher Pay', 'Pay raises fix shortages')
+                rows = [dict(arg=REVIEW, side='AT AFF', topic_reason='Ambiguous', key='k1'),
+                        dict(arg='Economy', side='AT AFF', topic_reason='Recognized answer heading', key='k2')]
+                self.assertEqual(corrections.apply(rows, lambda r: r['key']), 1)
+                self.assertEqual((rows[0]['side'], rows[0]['arg'], rows[0]['topic_reason']),
+                                 ('AT NEG', 'Teacher Pay', corrections.REASON))
+                self.assertIn(corrections.REASON, learn.LABEL_REASONS)
+                with self.assertRaises(ValueError):
+                    corrections.save('k3', 'AT NEG', '   ')
+
+
 if __name__ == '__main__':
     unittest.main()

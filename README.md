@@ -120,11 +120,20 @@ new files, so later updates take seconds to a couple of minutes.
   after the headings teams actually use ("AT: Readiness Collapse"), so a new topic
   sorts itself. A heading needs at least two teams to become a category, and
   spellings of the same heading are joined.
-- **Vague headings** ("AT Case", "Responses", none at all): the app learns from
-  your clearly labelled cards which words go with which category, and moves a
-  vague card only when it is confident. It runs on your computer, has no gen AI,
-  downloads nothing, and retrains on every update, so it learns each topic. In a
-  test on 15,000 real cards, about 9 in 10 of the cards it moved were right.
+- **Vague headings** ("AT Case", "Responses", none at all) are sorted two ways,
+  only when confident and only when the two agree:
+  - **Words:** the app learns from your clearly labelled cards which words go
+    with which category.
+  - **Citations:** if at least two other teams filed the same article (author and
+    year, or link) under one category, the card goes there too.
+
+  It runs on your computer, has no gen AI, downloads nothing, and retrains on
+  every update, so it learns each topic. In a test on 15,000 real cards, about
+  9 in 10 of the cards it moved were right.
+- **Move to…** on any card puts it where you want. Your fix is kept through
+  updates (in `corrections.json`) and teaches the sorter, so similar cards follow.
+- **Ranking:** inside each section, cards read by the most teams come first, then
+  cards from articles that many teams cite.
 - **Theory, framework (phil) and kritik cards** are hidden for Public Forum and
   shown for LD and Policy. Change it in **⚙ Settings**.
 - Cards that don't clearly answer one argument go in **Unsorted**.
@@ -167,7 +176,8 @@ restart your computer.
 | `cardgrab.py` | Reads `.docx` files under `docs/` into `cards.db` (in parallel, cached) |
 | `cardparse.py`, `cardformat.py` | Card boundaries and exact source formatting |
 | `organize.py` | Rule-based categories; unknown `AT …` headings become their own category |
-| `learn.py` | Small learned sorter (naive Bayes) trained on your own library, for vague headings |
+| `learn.py` | Small learned sorter (naive Bayes plus citation matching) trained on your own library |
+| `corrections.py` | Cards you moved by hand, kept in `corrections.json` |
 | `words.txt` | Common English words, used to repair sentences pasted as equations |
 | `library_export.py` | Whole-library Google Docs export |
 | `settings.py` | Settings and NSDA topic release dates |
