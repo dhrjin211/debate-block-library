@@ -327,3 +327,65 @@ def display_title(tag):
 def looks_like_citation(text):
     return bool(re.search(r'https?://|www\.',text or '',re.I) and
                 re.search(r"(?:\b(?:19|20)\d{2}\b|(?<!\d)['’]?\d{2}(?!\d))",(text or '')[:100]))
+
+
+# ---------- shared tags ----------
+# When several teams read the same evidence, each wrote its own tag. Tags written
+# for one round ("Their whole case is wrong", "Extend our Smith card") read oddly
+# when shared, so the card shows the clearest general tag among the teams' own.
+RELATIVE = re.compile(r"\b(?:their|they|they're|them|theirs|our|ours|we|we're|opponents?|my|"
+                      r"extend\w*|cross.?apply|same card|this card|that card|card|the aff|the neg|aff|neg|"
+                      r"pro|con|case|contention|1ac|1nc|2ac|2nc|1ar|2ar|1nr|2nr|"
+                      r"turns?\s+(?:the|their|it)|answers?\s+(?:the|their)|responds?|round|judge|ballot|voters?|"
+                      r"weigh\w*|prefer|framing|also|secondly|thirdly|otherwise|ultimately|else)\b", re.I)
+_LEADING = re.compile(r"^\s*(?:\[?\d+\s*[\]\).:\-–—]|[-–—*•]+|[a-z]\)|(?:a2|at)\s*:|and\b|but\b|also\b|first(?:ly)?\b|second(?:ly)?\b|third(?:ly)?\b|finally\b)[\s,;:]*", re.I)
+
+
+def _tag_words(tag):
+    return {w for w in re.findall(r"[a-z]{3,}", (tag or '').casefold())}
+
+
+def best_tag(tags, current=None, margin=1.5, evidence=''):
+    """The clearest, most general tag from several teams' tags for one card.
+
+    With `current` (the tag the card already shows), switch only when another tag
+    scores clearly higher, so a fine tag is never swapped for a sideways one."""
+    cleaned = []
+    for tag in tags:
+        tag = _LEADING.sub('', re.sub(r'\s+', ' ', tag or '')).strip(' ,;:-–—')
+        if tag and not PLACEHOLDER.search(tag) and not re.fullmatch(r'(?i)tag\s*\d*|card\s*\d*|\d+', tag):
+            cleaned.append(tag)
+    # Only real sentences can replace another tag: no one-word labels or citations.
+    def usable(tag):
+        return len(tag.split()) >= 4 and not looks_like_citation(tag) and \
+            not re.match(r"^[A-Z][\w'’-]+\s+(?:et al\.?\s+)?['’]?\d{2,4}\b", tag)
+    if not cleaned:
+        return None
+    counts = Counter(t.casefold() for t in cleaned)
+    unique = list({t.casefold(): t for t in cleaned}.values())
+    if len(unique) == 1:
+        return unique[0]
+    words = {t: _tag_words(t) for t in unique}
+    said = _tag_words(evidence)
+
+    def score(tag):
+        mine = words[tag]
+        others = [words[o] for o in unique if o is not tag]
+        # A tag that shares wording with the other teams' tags says what they agree on.
+        overlap = sum(len(mine & o) / max(1, len(mine | o)) for o in others) / max(1, len(others))
+        n = len(tag.split())
+        length = 0 if 5 <= n <= 25 else -1 if n < 5 else -0.5
+        length -= 1 if tag[:1].islower() else 0  # a fragment cut from a longer tag
+        relative = len(RELATIVE.findall(tag)) + len(re.findall(r'\bus\b', tag))  # "us", not "US"
+        # A good tag says what the evidence says.
+        grounded = len(mine & said) / max(1, len(mine)) if said else 0
+        return 3 * overlap + 2 * grounded + 0.6 * counts[tag.casefold()] + length - 1.5 * relative
+
+    candidates = [t for t in unique if usable(t)] or unique
+    best = max(candidates, key=lambda t: (score(t), -abs(len(t.split()) - 14)))
+    if current:
+        mine = _LEADING.sub('', re.sub(r'\s+', ' ', current)).strip()
+        same = next((t for t in unique if t.casefold() == mine.casefold()), None)
+        if same is not None and score(best) - score(same) < margin:
+            return same
+    return best

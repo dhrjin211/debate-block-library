@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Lock, RLock
 import threading
 import subprocess
-from organize import classify, display_title, veto, heading_topic, REVIEW, THEORY as THEORY_CATEGORIES
+from organize import classify, display_title, veto, heading_topic, best_tag, REVIEW, THEORY as THEORY_CATEGORIES
 from learn import learned_sort, citation_key
 import corrections
 from cardformat import formatted, docx_bytes
@@ -158,8 +158,8 @@ def _correction_key(row):
     return corrections.key(_evidence_text(row), _normalized_card_text(row.get("cite", "")))
 
 
-def move_card(card_id, side, arg):
-    """Save a hand correction for a card and every copy of its evidence."""
+def move_card(card_id, side, arg, new_tag=None):
+    """Save a hand correction (category and/or tag) for a card and every copy of its evidence."""
     card_id = int(card_id)
     rows = _RAW_CARD_CACHE if _RAW_CARD_CACHE is not None else []
     row = next((r for r in rows if r.get("id") == card_id), None)
@@ -167,7 +167,12 @@ def move_card(card_id, side, arg):
         row = next((r for r in _all_cards() if r.get("id") == card_id), None)
     if row is None:
         raise ValueError("That card is no longer in the library. Reload the page.")
-    saved = corrections.save(_correction_key(row), side or row.get("side"), arg, row.get("tag"))
+    shown = next((c for c in _all_cards() if c.get("id") == card_id), row)
+    if new_tag and new_tag.strip() == (shown.get("shared_tag") or clean_tag(shown.get("tag"))):
+        new_tag = None  # unchanged
+    if (side or shown.get("side")) == shown.get("side") and arg == shown.get("arg") and new_tag:
+        arg = None  # only the tag changed: leave the category to the sorter
+    saved = corrections.save(_correction_key(row), side or row.get("side"), arg, row.get("tag"), new_tag)
     with _CACHE_LOCK:
         _forget_cards()
     return saved
@@ -198,6 +203,13 @@ def _merged_cards(rows):
             len(targets[t]), t))
         for placements in (targets[best],):
             representative = dict(_preferred_card(placements))
+            # Every team's tag for this evidence, to pick the clearest shared one.
+            # Only teams that filed it under the same side and argument: the same
+            # evidence is sometimes read for opposite claims.
+            representative["_tags"] = [m.get("tag") for m in placements]
+            custom = next((m.get("custom_tag") for m in members if m.get("custom_tag")), None)
+            if custom:
+                representative["custom_tag"] = custom
             kinds = {}
             for member in placements:
                 kind = member.get("block") or "Defense / other"
@@ -234,9 +246,17 @@ def _merged_cards(rows):
                 retained.append((card, shingles))
                 continue
             fuller['teams'].update(card['teams'])
+            if (fuller.get('side'), fuller.get('arg')) == (card.get('side'), card.get('arg')):
+                fuller['_tags'] = fuller.get('_tags', []) + card.get('_tags', [])
+            if card.get('custom_tag') and not fuller.get('custom_tag'):
+                fuller['custom_tag'] = card['custom_tag']
             if fuller.get('block') == 'Defense / other' and card.get('block') != 'Defense / other':
                 fuller['block'] = card['block']
         merged.extend(card for card, _ in retained)
+    for card in merged:
+        chosen = card.get("custom_tag") or best_tag(card.get("_tags") or [card.get("tag")], card.get("tag"),
+                                                    evidence=(card.get("body") or "")[:3000])
+        card["shared_tag"] = chosen if chosen and chosen != clean_tag(card.get("tag")) else None
     return merged
 
 
@@ -522,7 +542,8 @@ def _list_entry(card):
     if "_list_entry" not in card:
         strength, reasons = response_strength(card)
         entry = {k: card.get(k) for k in LIST_FIELDS}
-        entry.update(display_tag=display_title(clean_tag(card["tag"])), preview=preview_text(card),
+        entry.update(display_tag=display_title(card.get("shared_tag") or clean_tag(card["tag"])),
+                     full_tag=card.get("shared_tag") or clean_tag(card["tag"]), preview=preview_text(card),
                      format_version=format_version(card), strength=strength, strength_reasons=reasons)
         card["_list_entry"] = entry
     return dict(card["_list_entry"], teams=len(card["teams"]),
@@ -568,9 +589,31 @@ def raw_card(card_id):
     return rows[0] if rows else None
 
 
+def shown_tag(card_id):
+    """The shared or hand-written tag shown for a card, or None to keep its own."""
+    try:
+        card_id = int(card_id)
+    except (TypeError, ValueError):
+        return None
+    return next((c.get("shared_tag") for c in _all_cards() if c.get("id") == card_id), None)
+
+
+def _with_tag(data, tag):
+    """Formatted-card JSON with its tag wording replaced (same tag styling)."""
+    from html import escape
+    card = json.loads(data)
+    card["tag_html"] = ('<p style="margin:0 0 6pt;white-space:pre-wrap;line-height:1.15"><span style="font-size:14pt;'
+                        'font-weight:700">' + escape(tag) + '</span></p>')
+    card["clipboard_html"] = ('<!doctype html><html><meta charset="utf-8"><body>' + card["tag_html"] +
+                              card["cite_html"] + card["body_html"] + '</body></html>')
+    lines = card.get("plain_text", "").split("\n")
+    card["plain_text"] = "\n".join([tag] + lines[1:])
+    return json.dumps(card).encode()
+
+
 def make_docx(card_id):
     card = raw_card(card_id)
-    return docx_bytes(card) if card else None
+    return docx_bytes(card, shown_tag(card_id)) if card else None
 
 
 def cached_formatted(card, version):
@@ -662,7 +705,9 @@ class H(BaseHTTPRequestHandler):
                 self.send(json.dumps({'error':'The library changed. Reload the page to see the current card.'}), 'application/json', status=409)
                 return
             try:
-                self.send(cached_formatted(card, version), "application/json")
+                data = cached_formatted(card, version)
+                tag = shown_tag(card["id"])
+                self.send(_with_tag(data, tag) if tag else data, "application/json")
             except ValueError as error:
                 self.send(json.dumps({"error": str(error)}), "application/json", status=422)
         elif u.path.startswith("/card/") and u.path.endswith(".docx"):
@@ -725,7 +770,7 @@ class H(BaseHTTPRequestHandler):
                     result = {"deleted": refresh.delete_month(data.get("origin"), data.get("month"))}
                     start_job(False)
                 elif path == "/api/move":
-                    result = move_card(data.get("id"), data.get("side"), data.get("arg"))
+                    result = move_card(data.get("id"), data.get("side"), data.get("arg"), data.get("tag"))
                 elif path == "/api/export":
                     start_export()
                     result = {"started": True}
@@ -803,7 +848,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .dlg h3{margin:0 0 4px}
 .dlg label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:14px}
 .dlg label.check{flex-direction:row;align-items:center;font-weight:400}
-.dlg input:not([type=checkbox]){padding:8px;border:1px solid #ccc;border-radius:8px;font:inherit;font-weight:400}
+.dlg textarea,.dlg input:not([type=checkbox]){padding:8px;border:1px solid #ccc;border-radius:8px;font:inherit;font-weight:400}
 .hint{font-size:13px;color:#555;margin:0}
 .err{color:#b3261e;font-size:14px;margin:0;min-height:1em}
 .row{display:flex;gap:10px;margin-top:6px}
@@ -845,12 +890,12 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <div class="row"><button id="folder" type="button">Open docs folder</button><button value="close">Close</button></div>
 </form></dialog>
 <dialog id="move-box"><form method="dialog" class="dlg">
-<h3>Move this card</h3>
-<p class="hint" id="move-tag"></p>
+<h3>Move or retag this card</h3>
+<label>Tag<textarea id="move-tag" rows="3" maxlength="300"></textarea></label>
 <label>Side<select id="move-side"><option>AT AFF</option><option>AT NEG</option></select></label>
 <label>Category<select id="move-arg"></select></label>
 <label id="move-new-row" hidden>New category name<input id="move-new" maxlength="60" placeholder="e.g. Readiness Collapse"></label>
-<p class="hint">Your choice is kept through updates, and the app learns from it to sort similar cards.</p>
+<p class="hint">Your changes are kept through updates. A new tag is used everywhere: the card list, Copy formatted, downloads and the export. Moves teach the app to sort similar cards.</p>
 <p id="move-error" class="err"></p>
 <div class="row"><button value="cancel">Cancel</button><button id="move-save" type="button">Move</button></div>
 </form></dialog>
@@ -905,7 +950,7 @@ function moveOptions(sideName,current){
 }
 function moveCard(i){
   moving=window.cur[i];
-  $("#move-tag").textContent=moving.display_tag||moving.tag;
+  $("#move-tag").value=moving.full_tag||moving.display_tag||moving.tag;
   $("#move-side").value=moving.side==="AT NEG"?"AT NEG":"AT AFF";
   moveOptions($("#move-side").value,moving.arg);
   $("#move-new").value="";$("#move-error").textContent="";
@@ -918,14 +963,14 @@ $("#move-save").onclick=async()=>{
   if(!arg){$("#move-error").textContent="Type a name for the new category.";return}
   try{
     $("#move-save").disabled=true;
-    await post("/api/move",{id:moving.id,side:$("#move-side").value,arg});
+    await post("/api/move",{id:moving.id,side:$("#move-side").value,arg,tag:$("#move-tag").value.trim()});
     $("#move-box").close();
     const open=document.querySelector(".grp.on");
     const where=open?[open.dataset.side,open.dataset.a,open.dataset.g]:null;
     await side();
     if(where){const again=[...document.querySelectorAll(".grp")].find(e=>e.dataset.side===where[0]&&e.dataset.a===where[1]&&e.dataset.g===where[2]);
       if(again){again.closest("[id^=t]").hidden=false;again.closest("[id^=s]").hidden=false;again.click()}}
-    $("#notice").textContent=`Moved to ${arg}. The app will use this to sort similar cards.`;
+    $("#notice").textContent="Saved.";
   }catch(e){$("#move-error").textContent=e.message}
   finally{$("#move-save").disabled=false}
 };
@@ -945,7 +990,7 @@ async function show(title,sub,url){
       <div class="preview">${esc(c.preview)}</div>
       <div class="body">${body}</div>
       <span class="show" onclick="toggleCard(${i})">▸ Show full card</span>
-      <div class="acts"><a href="/card/${c.id}.docx">Download .docx</a><span onclick="cp(${i})">Copy formatted</span><span onclick="moveCard(${i})">Move to…</span></div></div></div>`}).join("")+"</div>";
+      <div class="acts"><a href="/card/${c.id}.docx">Download .docx</a><span onclick="cp(${i})">Copy formatted</span><span onclick="moveCard(${i})">Move or retag…</span></div></div></div>`}).join("")+"</div>";
   window.cur=cards;
   // Load original formatting only for cards on or near the screen, 4 at a time.
   if(formatObserver)formatObserver.disconnect();

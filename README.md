@@ -130,8 +130,14 @@ new files, so later updates take seconds to a couple of minutes.
   It runs on your computer, has no gen AI, downloads nothing, and retrains on
   every update, so it learns each topic. In a test on 15,000 real cards, about
   9 in 10 of the cards it moved were right.
-- **Move to…** on any card puts it where you want. Your fix is kept through
-  updates (in `corrections.json`) and teaches the sorter, so similar cards follow.
+- **Move or retag…** on any card puts it where you want and lets you rewrite its
+  tag. Your changes are kept through updates (in `corrections.json`); moves teach
+  the sorter, so similar cards follow.
+- **Shared tags:** when several teams read the same card for the same argument,
+  the card shows the clearest general tag among theirs, so "Their whole case is
+  wrong" or "Tag 9" gives way to a tag that says what the evidence proves. Tags
+  from teams that used the card for a different claim are never mixed in. The
+  chosen tag is used in Copy formatted, downloads and the export.
 - **Ranking:** inside each section, cards read by the most teams come first, then
   cards from articles that many teams cite.
 - **Theory, framework (phil) and kritik cards** are hidden for Public Forum and

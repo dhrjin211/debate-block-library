@@ -109,5 +109,28 @@ class CorrectionTests(unittest.TestCase):
                     corrections.save('k3', 'AT NEG', '   ')
 
 
+class SharedTagTests(unittest.TestCase):
+    def test_round_specific_tags_lose_to_general_ones(self):
+        from organize import best_tag
+        tags = ['Their whole case is wrong', '2] Deterrence fails because conventional forces are enough to stop Russia',
+                'Conventional forces deter Russia, so nukes are unnecessary', 'Extend our Smith card']
+        self.assertEqual(best_tag(tags), 'Deterrence fails because conventional forces are enough to stop Russia')
+        self.assertEqual(best_tag(['Only one tag']), 'Only one tag')
+
+    def test_merged_card_shows_shared_tag_and_hand_tag_wins(self):
+        import dashboard
+        body = 'Conventional forces are enough to deter Russia without nuclear weapons. ' * 3
+        rows = [dict(id=i, tag=t, cite='Lee 26', body=body, marked=body, side='AT AFF', arg='Deterrence',
+                     block='Defense / other', source=s, source_file=s + '.docx')
+                for i, (t, s) in enumerate([('Their whole case is wrong', 'A'),
+                                            ('Conventional forces deter Russia without nukes', 'B'),
+                                            ('Conventional forces are enough to deter Russia', 'C')])]
+        merged = dashboard._merged_cards([dict(r) for r in rows])
+        self.assertEqual(len(merged), 1)
+        self.assertNotEqual(merged[0]['shared_tag'] or merged[0]['tag'], 'Their whole case is wrong')
+        rows[0]['custom_tag'] = 'My own tag'
+        self.assertEqual(dashboard._merged_cards([dict(r) for r in rows])[0]['shared_tag'], 'My own tag')
+
+
 if __name__ == '__main__':
     unittest.main()

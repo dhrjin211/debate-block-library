@@ -29,15 +29,22 @@ def load():
         return {}
 
 
-def save(card_key, side, arg, tag=''):
+def save(card_key, side, arg, tag='', new_tag=None):
+    """Save a move (side + arg) and/or a hand-written tag (new_tag) for one card."""
     arg = ' '.join((arg or '').split())[:60]
-    if not arg:
+    new_tag = ' '.join((new_tag or '').split())[:300]
+    if not arg and not new_tag:
         raise ValueError('Pick or type a category.')
-    if side not in ('AT AFF', 'AT NEG', 'Other / unclear'):
+    if arg and side not in ('AT AFF', 'AT NEG', 'Other / unclear'):
         raise ValueError('Unknown side.')
     with _LOCK:
         data = load()
-        data[card_key] = dict(side=side, arg=arg, tag=(tag or '')[:200])
+        entry = dict(data.get(card_key) or {}, tag=(tag or '')[:200])
+        if arg:
+            entry.update(side=side, arg=arg)
+        if new_tag:
+            entry['new_tag'] = new_tag
+        data[card_key] = entry
         temporary = PATH.with_suffix('.tmp')
         temporary.write_text(json.dumps(data, indent=1))
         temporary.replace(PATH)
@@ -52,7 +59,9 @@ def apply(rows, key_of):
     moved = 0
     for row in rows:
         fix = data.get(key_of(row))
-        if fix:
+        if fix and fix.get('new_tag'):
+            row['custom_tag'] = fix['new_tag']
+        if fix and fix.get('arg'):
             row.update(side=fix['side'], arg=fix['arg'], topic_reason=REASON,
                        needs_review=fix['arg'] == 'Unsorted')
             moved += 1

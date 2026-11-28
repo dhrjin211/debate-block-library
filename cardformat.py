@@ -349,7 +349,9 @@ def formatted(card):
             'plain_text':'\n'.join(p.text for p in paras),'formatting_source':'Original Word document'}
 
 
-def docx_bytes(card):
+def docx_bytes(card, tag=None):
+    """The card as its own .docx. `tag` replaces the tag's wording (a shared or
+    hand-written tag), keeping the tag's first run formatting."""
     source_doc,paras=resolve(card)
     # Reopen the original package to retain its styles, hyperlinks, theme and media relationships.
     path=(BASE/'docs'/card['source_file']).resolve()
@@ -379,6 +381,11 @@ def docx_bytes(card):
                 run.font.size=Pt(size)
             if role=='tag':run.bold=True
             offset+=len(text)
+        if index==0 and tag:
+            runs=list(p._p.iter(qn('w:r')))
+            for extra in runs[1:]:extra.getparent().remove(extra)
+            if runs:Run(runs[0],p).text=tag
+            else:p.add_run(tag).bold=True
         p.paragraph_format.space_after=Pt(6)
         p.paragraph_format.keep_with_next= index<2
         p.paragraph_format.page_break_before=False

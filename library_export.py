@@ -336,7 +336,11 @@ def library_docx(cards, topic, source_filter='', log=lambda line: None, workers=
                 continue
             number += 1
             paragraphs = data['paragraphs']
-            _source_paragraph(doc, paragraphs[0], 'tag', number)
+            tag = paragraphs[0]
+            if card.get('shared_tag'):
+                # The clearest tag among the teams who read this card, or the user's own.
+                tag = dict(text=card['shared_tag'], pieces=[[card['shared_tag'], {}, 14]], media=[])
+            _source_paragraph(doc, tag, 'tag', number)
             _source_paragraph(doc, paragraphs[1], 'cite')
             for paragraph in paragraphs[2:]: _source_paragraph(doc, paragraph, 'body')
         previous_side = side
