@@ -61,8 +61,10 @@ class LibraryExportTests(unittest.TestCase):
         self.assertEqual(sum(p.style.name=='Heading 3' for p in first.paragraphs), 1)
         self.assertEqual(sum(p.style.name=='Heading 3' for p in second.paragraphs), 2)
         with patch('library_export.resolve', side_effect=ValueError('Source missing')):
-            with self.assertRaisesRegex(ValueError, 'Source missing'):
-                library_docx([self.card()], 'Topic')
+            broken = Document(io.BytesIO(library_docx([self.card()], 'Topic')))
+        texts = [p.text for p in broken.paragraphs]
+        self.assertIn('Cards that could not be exported', texts)  # listed, never silently dropped
+        self.assertTrue(any('Exact original tag' in t and 'Source missing' in t for t in texts))
         with self.assertRaises(ValueError): library_docx([], 'Topic')
 
     def test_numbering_is_continuous_across_response_types_and_restarts_per_argument(self):
@@ -77,6 +79,31 @@ class LibraryExportTests(unittest.TestCase):
         titles=[p for p in doc.paragraphs if p.style.name=='Title']
         self.assertEqual([p.text for p in titles],['AT AFF','AT NEG'])
         self.assertTrue(titles[1].paragraph_format.page_break_before)
+
+
+    def test_images_and_equations_are_copied_not_refused(self):
+        import struct, zlib
+        from docx.shared import Inches
+        def png():
+            raw = b'\x00\xff\x00\x00' * 1  # one red pixel
+            def chunk(kind, data):
+                return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+            return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
+                    + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+        source, ps = self.source()
+        ps[-1].add_run().add_picture(io.BytesIO(png()), width=Inches(1))
+        math = OxmlElement('m:oMath'); r = OxmlElement('m:r'); t = OxmlElement('m:t'); t.text = 'E=mc^2'
+        r.append(t); math.append(r); ps[-1]._p.append(math)
+        with patch('library_export.resolve', return_value=(source, source.paragraphs)):
+            data = library_docx([self.card(), self.card(arg='Disarmament')], 'Topic')
+        doc = Document(io.BytesIO(data))  # the file opens again: nothing broken
+        self.assertEqual(len(doc.inline_shapes), 2)  # one picture per card
+        self.assertTrue(all(s._inline.graphic.graphicData.pic.blipFill.blip.embed in doc.part.related_parts for s in doc.inline_shapes))
+        equations = doc.element.body.findall('.//' + qn('m:oMath'))
+        self.assertEqual(len(equations), 2)
+        self.assertEqual(''.join(equations[0].itertext()), 'E=mc^2')
+        ids = [e.get('id') for e in doc.element.body.iter(qn('wp:docPr'))]
+        self.assertEqual(len(ids), len(set(ids)))  # no clashing picture ids
 
 
 if __name__ == '__main__': unittest.main()

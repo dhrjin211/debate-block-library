@@ -40,6 +40,32 @@ JOB_LOCK = Lock()
 CREDENTIALS = {}  # OpenCaselist sign-in, memory only, cleared when the app stops
 
 
+EXPORT = {"running": False, "line": "", "error": "", "ready": None}
+EXPORT_LOCK = Lock()
+
+
+def start_export():
+    """Build the whole-library export in the background; the page polls /api/export."""
+    with EXPORT_LOCK:
+        if EXPORT["running"]:
+            return
+        EXPORT.update(running=True, line="Starting…", error="", ready=None)
+
+    def run():
+        from library_export import library_docx
+        try:
+            def log(line):
+                EXPORT["line"] = str(line)
+            EXPORT["ready"] = library_docx(cards_from_source(), topic(), log=log)
+            EXPORT["line"] = "Done."
+        except Exception as error:
+            EXPORT["error"] = str(error) if isinstance(error, ValueError) else f"Export failed: {error}"
+        finally:
+            EXPORT["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def start_job(download):
     with JOB_LOCK:
         if JOB["running"]:
@@ -548,12 +574,14 @@ class H(BaseHTTPRequestHandler):
                       "application/json")
         elif u.path == "/api/search":
             self.send(json.dumps(search(a.get("q", ""),a.get('source',''))), "application/json")
+        elif u.path == "/api/export":
+            self.send(json.dumps({k: (v is not None if k == "ready" else v) for k, v in EXPORT.items()}), "application/json")
         elif u.path == '/export/library.docx':
             from library_export import library_docx
             try:
                 # This always exports the whole library, independent of search
-                # or the selected sidebar group.
-                data = library_docx(cards_from_source(), topic())
+                # or the selected sidebar group. Serve the background build if ready.
+                data = EXPORT["ready"] if a.get("ready") and EXPORT["ready"] else library_docx(cards_from_source(), topic())
                 self.send(data, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                           {'Content-Disposition': 'attachment; filename="Rebuttal-Blocks.docx"'})
             except ValueError as error:
@@ -629,6 +657,9 @@ class H(BaseHTTPRequestHandler):
                         raise ValueError("Wait for the current update to finish.")
                     result = {"deleted": refresh.delete_month(data.get("origin"), data.get("month"))}
                     start_job(False)
+                elif path == "/api/export":
+                    start_export()
+                    result = {"started": True}
                 elif path == "/api/open-folder":
                     refresh.DOCS.mkdir(exist_ok=True)
                     opener = {"darwin": ["open"], "win32": ["explorer"]}.get(sys.platform, ["xdg-open"])
@@ -895,7 +926,17 @@ $("#export-all").onclick=async()=>{
   const button=$("#export-all");button.disabled=true;button.textContent="Preparing all cards…";
   $("#notice").textContent="Building the complete library with original source formatting…";
   try{
-    const response=await fetch('/export/library.docx');
+    // Runs in the background on the computer; this shows progress and time left.
+    await post("/api/export");
+    for(;;){
+      const s=await j("/api/export");
+      if(s.error)throw new Error(s.error);
+      $("#notice").textContent=s.line||"Preparing…";
+      if(!s.running&&s.ready)break;
+      if(!s.running&&!s.ready)throw new Error("Export stopped unexpectedly. Try again.");
+      await new Promise(r=>setTimeout(r,1000));
+    }
+    const response=await fetch('/export/library.docx?ready=1');
     if(!response.ok){const error=await response.json();throw new Error(error.error||'Export failed')}
     const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download='Rebuttal-Blocks.docx';document.body.appendChild(link);link.click();link.remove();
