@@ -28,7 +28,7 @@ from docx.shared import Inches, Pt, RGBColor
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from cardformat import HIGHLIGHTS, pieces, resolve
+from cardformat import HIGHLIGHTS, pieces, prose_equation, resolve
 
 BASE = Path(__file__).resolve().parent
 SIDE_ORDER = {'AT AFF': 0, 'AT NEG': 1}
@@ -59,6 +59,8 @@ def _paragraph_data(p, role):
         for element in p._p.iter(qn('m:oMathPara'), qn('m:oMath')):
             if element.tag == qn('m:oMath') and element.getparent().tag == qn('m:oMathPara'):
                 continue  # copied with its equation paragraph
+            if prose_equation(''.join(t.text or '' for t in element.iter(qn('m:t')))):
+                continue  # pasted prose, already part of the text (see cardformat.pieces)
             media.append(dict(kind='math', xml=etree.tostring(element).decode()))
     return dict(text=p.text, pieces=[[t, a, s] for t, a, s in pieces(p, role)], media=media)
 

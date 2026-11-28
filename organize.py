@@ -10,7 +10,7 @@ from collections import Counter
 from functools import lru_cache
 
 REVIEW = 'Unsorted'
-PLACEHOLDER = re.compile(r'\b(?:placeholder[\s_\-]*\d*|insert\s+(?:card|tag|text)|todo|tbd|lorem ipsum)\b|^\s*<<\s*(?:inserted|.*for reference)\s*>>\s*$', re.I)
+PLACEHOLDER = re.compile(r'\b(?:placeholder[\s_\-]*\d*|insert\s+(?:card|tag|text)|todo|tbd|lorem ipsum|text condensed)\b|^\s*<<\s*(?:inserted|.*for reference)\s*>>\s*$', re.I)
 # Built-in categories are general debate impacts and argument types that come up on
 # every topic. Nothing here is tied to one resolution: topic-specific arguments get
 # their categories from the files' own headings (see heading_label), so a new topic
@@ -119,7 +119,21 @@ ALIASES = {
  'condo':'Theory and Topicality','perm':'Theory and Topicality','k':'Critiques','kritik':'Critiques','cap':'Critiques','capitalism':'Critiques',
  'aliens':'Speculative Impacts','spark':'Speculative Impacts',
 }
-GENERIC = {'','aff','neg','pro','con','cards','card','link','links','off','offs','on','analytics','analytic','extensions','extension','extention','ext','misc','new','other stuff','args','arguments','evidence','random','backlines','backline','2ac','2nc','1ar','1nr','a2','at','adv','da','cp','plan','general','responses','response','overview','ov','o v','u','uq','l','lt','nl','nq','nu','turn','turns','solvency','link defense','impact defense','impact mitigation','defense','impact','case','other unclear','other','top level','core','c1','c2','c3','offense','blocks','rebuttal','frontline'}
+# Theory, philosophy and kritik headings (hidden in Public Forum unless turned on).
+ALIASES.update({w: 'Theory and Topicality' for w in (
+    'spec','aspec','ospec','spikes','tricks','trix','rvi','rvis','pics','paragraph theory','nibs',
+    'condo bad','condo good','disclosure theory','theory shells','t shells','fairness','framework theory')})
+ALIASES.update({w: 'Framework' for w in (
+    'kant','kantianism','utilitarianism','deont','deontology','contractualism','rawls','levinas',
+    'pragmatism','skep','skepticism','determinism','consequentialism','phil','virtue ethics',
+    'moral uncertainty','ethics','util good','util bad','value','value criterion','criterion')})
+ALIASES.update({w: 'Critiques' for w in (
+    'cap k','set col','setcol','afropessimism','afropess','psychoanalysis','psycho','baudrillard','fem',
+    'fem k','security k','biopower','queer','queerness','ableism','orientalism','imperialism','deleuze',
+    'nietzsche','k aff','kritik','kritiks','ks','the k','alt','alternative','root cause','ontology')})
+GENERIC = {'','aff','neg','pro','con','cards','card','link','links','off','offs','on','analytics','analytic','extensions','extension','extention','ext','misc','new','other stuff','args','arguments','evidence','random','backlines','backline','2ac','2nc','1ar','1nr','a2','at','adv','da','cp','plan','general','responses','response','overview','ov','o v','u','uq','l','lt','nl','nq','nu','turn','turns','solvency','link defense','impact defense','impact mitigation','defense','impact','case','other unclear','other','top level','core','c1','c2','c3','offense','blocks','rebuttal','frontline',
+ 'carded evidence','carded','answers','answer to neg','answer to aff','answers to neg','answers to aff','aff constructive','neg constructive',
+ 'constructive','pro constructive','con constructive','contention','1ac','1nc','speech doc','vs case','on case','off case','case args','case turns'}
 
 
 def plain(text):

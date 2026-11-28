@@ -12,6 +12,7 @@ from pathlib import Path
 from threading import Lock
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 from docx.text.run import Run
@@ -190,16 +191,131 @@ def citation_lead(text):
     return match.end() if match else 0
 
 
+# ---------- prose that was pasted as an equation ----------
+# Text copied from web pages that use $...$ for math ("US$1.4 billion ... US$2
+# trillion") arrives as one Word equation holding a whole sentence with its spaces
+# stripped. Word and Google Docs can't wrap an equation, so it showed one character
+# per line across many pages. Such "equations" are turned back into normal text.
+
+def prose_equation(text):
+    return len(text) >= 15 and bool(re.search(r'[A-Za-z]{6,}', text))
+
+
+_VOCAB = {}
+
+
+@lru_cache(maxsize=1)
+def _english():
+    """words.txt: about 27,000 English words, most common first (from debate evidence)."""
+    try:
+        return (BASE / 'words.txt').read_text().split()
+    except OSError:
+        return []
+
+
+def _ranked_costs(words):
+    import math
+    scale = math.log(max(len(words), 2))
+    return {w: math.log((rank + 1) * scale) for rank, w in enumerate(words)}
+
+
+def _vocabulary(part):
+    """Word costs for putting spaces back: common English words, plus the words of
+    the source document itself (names, topic words)."""
+    from collections import Counter
+    cached = _VOCAB.get(id(part))
+    if cached and cached[0] is part:
+        return cached[1], cached[2]
+    text = ' '.join(t.text or '' for t in part.element.iter(qn('w:t')))
+    counts = Counter(w.lower() for w in re.findall(r'[A-Za-z]+', text))
+    costs = dict(_ranked_costs(_english()))
+    for w, cost in _ranked_costs([w for w, n in counts.most_common() if n >= 2]).items():
+        costs[w] = min(costs.get(w, cost), cost)
+    for w in list(costs):
+        if len(w) == 1 and w not in ('a', 'i'):
+            costs[w] += 8
+    unknown = max(costs.values(), default=10) + 2
+    if len(_VOCAB) > 16:
+        _VOCAB.clear()
+    _VOCAB[id(part)] = (part, costs, unknown)
+    return costs, unknown
+
+
+def unspaced(text, part):
+    """Put spaces back into run-together prose: "1.4billionfrom2019" -> "1.4 billion from 2019"."""
+    costs, unknown = _vocabulary(part)
+
+    def split_letters(word):
+        lower = word.lower()
+        best = [0.0] + [float('inf')] * len(lower)
+        back = [0] * (len(lower) + 1)
+        for i in range(1, len(lower) + 1):
+            for j in range(max(0, i - 24), i):
+                cost = best[j] + costs.get(lower[j:i], unknown + 1.5 * (i - j) if i - j <= 14 else float('inf'))
+                if cost < best[i]:
+                    best[i], back[i] = cost, j
+        out, i = [], len(lower)
+        while i:
+            out.append(word[back[i]:i]); i = back[i]
+        return out[::-1]
+
+    tokens = re.findall(r'[A-Za-z]+|\d[\d.,]*\d|\d|\s+|.', text)
+    out = []
+    for token in tokens:
+        if token.isalpha():
+            # Case changes are word breaks: "inFY", "TheUS|spends", "ASEAN|nations".
+            parts = re.findall(r'[A-Z]{2,}(?=[a-z])|[A-Z]{2,}(?![a-z])|[A-Z]?[a-z]+|[A-Z]', token)
+            words = [w for part in parts for w in (split_letters(part) if not part.isupper() else [part])]
+        else:
+            words = [token]
+        for w in words:
+            prev = out[-1] if out else ''
+            if prev and not prev.isspace() and not w.isspace():
+                joined = prev[-1] + w[0]
+                # A space between words and numbers, and after sentence punctuation,
+                # but not inside "clean-up", "[26]", "(2020" or "14.82%".
+                if (prev[-1].isalnum() and w[0].isalnum()) or \
+                        (prev[-1] in ',;:!?)]' and w[0].isalnum()) or \
+                        (prev[-1] == '.' and w[0].isupper()) or \
+                        (prev[-1].isalnum() and w[0] == '(') and joined not in ('-',):
+                    out.append(' ')
+            out.append(w)
+    return ''.join(out)
+
+
+def _math_text(element):
+    return ''.join(t.text or '' for t in element.iter(qn('m:t')))
+
+
 def pieces(paragraph, role):
     lead=citation_lead(paragraph.text) if role=='cite' else 0
     offset=0
-    for element in paragraph._p.iter(qn('w:r')):
+    elements=[e for e in paragraph._p.iter(qn('w:r'), qn('m:oMath'))
+              if not (e.tag==qn('m:oMath') and e.getparent().tag==qn('m:oMath'))]
+    last=None
+    for index,element in enumerate(elements):
+        if element.tag==qn('m:oMath'):
+            text=_math_text(element)
+            if not prose_equation(text):
+                continue  # a real equation: copied as an equation by the export
+            text=unspaced(text,paragraph.part)
+            if text[:1].isdigit():
+                text='$'+text  # the $ signs were taken as math delimiters
+            after=next((Run(e,paragraph).text for e in elements[index+1:] if e.tag==qn('w:r')),'')
+            if after[:1].isdigit():
+                text+='$'
+            elif after[:1].isalnum():
+                text+=' '
+            space=last and not last[0][-1:].isspace() and not text.startswith('$')
+            yield ' '+text if space else text,(last[1] if last else attributes(Run(OxmlElement('w:r'),paragraph),paragraph)),(last[2] if last else 11)
+            continue
         run=Run(element,paragraph);text=run.text;a=attributes(run,paragraph)
         boundaries=[0,len(text)]
         if role=='cite' and offset<lead<offset+len(text):boundaries.insert(1,lead-offset)
         for start,end in zip(boundaries,boundaries[1:]):
             size=14 if role=='tag' or (role=='cite' and offset+start<lead) else (8 if role=='cite' else body_size(a))
             yield text[start:end],a,size
+            if text[start:end]:last=(text[start:end],a,size)
         offset+=len(text)
 
 

@@ -120,6 +120,13 @@ new files, so later updates take seconds to a couple of minutes.
   after the headings teams actually use ("AT: Readiness Collapse"), so a new topic
   sorts itself. A heading needs at least two teams to become a category, and
   spellings of the same heading are joined.
+- **Vague headings** ("AT Case", "Responses", none at all): the app learns from
+  your clearly labelled cards which words go with which category, and moves a
+  vague card only when it is confident. It runs on your computer, has no gen AI,
+  downloads nothing, and retrains on every update, so it learns each topic. In a
+  test on 15,000 real cards, about 9 in 10 of the cards it moved were right.
+- **Theory, framework (phil) and kritik cards** are hidden for Public Forum and
+  shown for LD and Policy. Change it in **⚙ Settings**.
 - Cards that don't clearly answer one argument go in **Unsorted**.
 - Inside each section, cards read by the most teams come first.
 
@@ -160,6 +167,8 @@ restart your computer.
 | `cardgrab.py` | Reads `.docx` files under `docs/` into `cards.db` (in parallel, cached) |
 | `cardparse.py`, `cardformat.py` | Card boundaries and exact source formatting |
 | `organize.py` | Rule-based categories; unknown `AT …` headings become their own category |
+| `learn.py` | Small learned sorter (naive Bayes) trained on your own library, for vague headings |
+| `words.txt` | Common English words, used to repair sentences pasted as equations |
 | `library_export.py` | Whole-library Google Docs export |
 | `settings.py` | Settings and NSDA topic release dates |
 | `start.py`, `server.py` | Launcher (background server on port 8420) |

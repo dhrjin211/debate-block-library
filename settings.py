@@ -12,6 +12,7 @@ DEFAULTS = {
     'since': '',                  # custom start date (YYYY-MM-DD); empty = current topic's release date
     'keywords': '',               # optional, comma-separated: keep only files that mention these
     'include_constructive': True,   # also keep 1AC/1NC case cards, not only responses
+    'show_theory': None,          # theory, framework (phil) and K cards; None = by event (off for PF)
 }
 
 
@@ -29,8 +30,8 @@ def save(changes):
     for key, value in (changes or {}).items():
         if key not in DEFAULTS:
             continue
-        if key == 'include_constructive':
-            values[key] = bool(value)
+        if key in ('include_constructive', 'show_theory'):
+            values[key] = None if value is None else bool(value)
             continue
         value = str(value or '').strip()
         if key == 'caselist':
@@ -113,6 +114,15 @@ def current_topic(caselist='', today=None):
                     label = f'{label} {topic_year}'
                 found = (f'{label} {event_name}', released)
     return found
+
+
+def show_theory(values=None):
+    """Theory, framework (phil) and K cards are shown in LD and Policy, hidden in PF,
+    unless the user chose otherwise in Settings."""
+    values = values or load()
+    if values.get('show_theory') is not None:
+        return bool(values['show_theory'])
+    return event(values['caselist']) != 'pf'
 
 
 def since(values=None):

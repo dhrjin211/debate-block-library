@@ -21,7 +21,8 @@ from pathlib import Path
 from threading import Lock, RLock
 import threading
 import subprocess
-from organize import classify, display_title, veto, heading_topic, REVIEW
+from organize import classify, display_title, veto, heading_topic, REVIEW, THEORY as THEORY_CATEGORIES
+from learn import learned_sort
 from cardformat import formatted, docx_bytes
 
 import settings
@@ -252,6 +253,11 @@ def _library_stamp():
     return (stat.st_ino, stat.st_mtime_ns, stat.st_size, changed)
 
 
+def _forget_cards():
+    global _CARD_CACHE, _RAW_CARD_CACHE, _OUTLINE_CACHE
+    _CARD_CACHE = _RAW_CARD_CACHE = _OUTLINE_CACHE = None
+
+
 def _load_cards():
     global _CARD_CACHE, _RAW_CARD_CACHE, _OUTLINE_CACHE, _DB_STAMP
     stamp = _library_stamp()
@@ -289,6 +295,9 @@ def _load_cards():
                 row.update(topic_reason=reason, needs_review=needs_review, display_tag=display_title(row['tag']))
                 eligible.append(row)
         _keep_shared_heading_categories(eligible)
+        learned_sort(eligible, log=lambda line: print(line, flush=True))
+        if not settings.show_theory():
+            eligible = [row for row in eligible if row["arg"] not in THEORY_CATEGORIES]
         _RAW_CARD_CACHE = eligible
         _CARD_CACHE = _merged_cards(eligible)
     return _CARD_CACHE
@@ -587,7 +596,7 @@ class H(BaseHTTPRequestHandler):
         elif u.path == "/api/settings":
             values = settings.load()
             label, released = settings.current_topic(a.get("caselist", values["caselist"]))
-            self.send(json.dumps(dict(values, signed_in=bool(CREDENTIALS), effective_since=settings.since(values),
+            self.send(json.dumps(dict(values, signed_in=bool(CREDENTIALS), effective_since=settings.since(values), show_theory=settings.show_theory(values),
                                       current_topic=label, release=released.isoformat())), "application/json")
         elif u.path == "/api/job":
             self.send(json.dumps(JOB), "application/json")
@@ -666,6 +675,7 @@ class H(BaseHTTPRequestHandler):
                 if path == "/api/settings":
                     before = settings.load()["include_constructive"]
                     result = settings.save(data)
+                    _forget_cards()  # re-apply the theory/phil choice
                     if result["include_constructive"] != before and not JOB["running"]:
                         start_job(False)  # case cards are chosen while files are read
                         result = dict(result, rebuilding=True)
@@ -790,6 +800,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <label>Only keep files that mention (optional)<input id="s-keywords" placeholder="e.g. NATO, TPNW, disarmament"></label>
 <p class="hint">Separate words with commas. Files that mention them fewer than 3 times are skipped. If you leave this empty, old-topic files are skipped automatically using the words in your topic name.</p>
 <label class="check"><input id="s-constructive" type="checkbox"> Include case (1AC/1NC) cards, not only responses (turn off for a smaller, responses-only library)</label>
+<label class="check"><input id="s-theory" type="checkbox"> Show theory, framework (phil) and kritik cards (off by default for Public Forum)</label>
 <p id="s-error" class="err"></p>
 <div class="row"><button id="settings-save" type="button" class="primary">Save</button><button value="close">Cancel</button></div>
 </form></dialog>
@@ -922,7 +933,7 @@ $("#upload").onchange=async e=>{
   catch(err){$("#log").textContent+="⚠ "+err.message}
   e.target.value=""
 };
-$("#settings-open").onclick=async()=>{try{await loadSettings()}catch(e){$("#notice").textContent="The app isn't responding. Double-click Start, then reload this page.";return}$("#s-topic").value=config.topic;$("#s-caselist").value=config.caselist;$("#s-since").value=config.effective_since;sinceHint();$("#s-keywords").value=config.keywords;$("#s-constructive").checked=config.include_constructive;$("#s-error").textContent="";$("#settings-box").showModal()};
+$("#settings-open").onclick=async()=>{try{await loadSettings()}catch(e){$("#notice").textContent="The app isn't responding. Double-click Start, then reload this page.";return}$("#s-topic").value=config.topic;$("#s-caselist").value=config.caselist;$("#s-since").value=config.effective_since;sinceHint();$("#s-keywords").value=config.keywords;$("#s-constructive").checked=config.include_constructive;$("#s-theory").checked=config.show_theory;$("#s-error").textContent="";$("#settings-box").showModal()};
 const longDate=d=>new Date(d+"T12:00").toLocaleDateString(undefined,{month:"long",day:"numeric",year:"numeric"});
 async function sinceHint(){
   const c=await j("/api/settings?caselist="+encodeURIComponent($("#s-caselist").value.trim()));
@@ -933,7 +944,7 @@ async function sinceHint(){
 }
 $("#s-caselist").onchange=sinceHint;$("#s-since").onchange=sinceHint;
 $("#settings-save").onclick=async()=>{
-  try{const v=await post("/api/settings",{topic:$("#s-topic").value,caselist:$("#s-caselist").value,since:$("#s-since").value,keywords:$("#s-keywords").value,include_constructive:$("#s-constructive").checked});
+  try{const v=await post("/api/settings",{topic:$("#s-topic").value,caselist:$("#s-caselist").value,since:$("#s-since").value,keywords:$("#s-keywords").value,include_constructive:$("#s-constructive").checked,show_theory:$("#s-theory").checked});
     document.getElementById("topic").textContent=v.topic?"Topic: "+v.topic:"Set your topic in ⚙ Settings";$("#settings-box").close();side().catch(()=>{})}
   catch(e){$("#s-error").textContent=e.message}
 };
